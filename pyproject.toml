@@ -11,3 +11,8 @@ dependencies = [
     "python-telegram-bot>=22.6",
     "supabase>=2.28.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
