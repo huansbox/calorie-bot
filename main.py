@@ -12,6 +12,7 @@ from telegram.ext import (
 from config import TELEGRAM_CHAT_ID, TELEGRAM_TOKEN
 from handlers.meal import handle_photo, handle_text
 from handlers.tdee import cmd_tdee
+from handlers.query import cmd_today
 from handlers.weight import cmd_weight
 
 logging.basicConfig(
@@ -54,6 +55,11 @@ async def _cmd_tdee(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @auth_check
+async def _cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await cmd_today(update, context)
+
+
+@auth_check
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Calorie Bot 啟動完成，直接傳食物照片或文字即可記錄。")
 
@@ -64,6 +70,7 @@ def main():
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("w", _cmd_weight))
     app.add_handler(CommandHandler("tdee", _cmd_tdee))
+    app.add_handler(CommandHandler("today", _cmd_today))
     app.add_handler(MessageHandler(filters.PHOTO, _handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_text))
 
