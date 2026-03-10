@@ -2,6 +2,7 @@ import logging
 
 from telegram import Update
 from telegram.ext import (
+    Application,
     ApplicationBuilder,
     CommandHandler,
     ContextTypes,
@@ -15,6 +16,7 @@ from handlers.meal import handle_photo, handle_text
 from handlers.tdee import cmd_tdee
 from handlers.query import cmd_today
 from handlers.weight import cmd_weight
+from scheduler import setup_scheduler
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -74,8 +76,17 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Calorie Bot 啟動完成，直接傳食物照片或文字即可記錄。")
 
 
+async def post_init(application: Application):
+    setup_scheduler(application)
+
+
 def main():
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app = (
+        ApplicationBuilder()
+        .token(TELEGRAM_TOKEN)
+        .post_init(post_init)
+        .build()
+    )
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("w", _cmd_weight))

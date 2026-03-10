@@ -47,18 +47,33 @@ class FoodAnalysis:
 def parse_ai_response(raw: str) -> FoodAnalysis:
     """解析 Claude 回傳的 JSON 字串為 FoodAnalysis。
 
-    處理可能的 markdown code fence 包裹。
+    處理可能的 markdown code fence 包裹，以及偶發的畸形 JSON。
     """
     text = raw.strip()
     # 移除 markdown code fence
     if text.startswith("```"):
-        # 移除開頭的 ```json 或 ```
         first_newline = text.index("\n")
         text = text[first_newline + 1 :]
-        # 移除結尾的 ```
         text = text.rstrip("`").strip()
 
-    data = json.loads(text)
+    # 嘗試解析，失敗則修復常見畸形後重試
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        import re
+        # 嘗試只擷取 {...} 部分
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        if match:
+            text = match.group()
+        # 修復常見畸形：key">value → key":value
+        text = re.sub(r'"\s*>\s*', '": ', text)
+        try:
+            data = json.loads(text)
+            logger.warning("Claude 回傳畸形 JSON，已自動修復")
+        except json.JSONDecodeError:
+            logger.error("無法解析 Claude 回傳: %s", raw)
+            raise ValueError(f"Claude 回傳無法解析的格式: {raw[:200]}")
+
     return FoodAnalysis(
         description=data["description"],
         calories=int(data["calories"]),
