@@ -105,7 +105,7 @@ async def analyze_food(
 
     logger.info("Calling Claude API for food analysis")
     response = client.messages.create(
-        model="claude-sonnet-4-5-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=512,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": content}],

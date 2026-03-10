@@ -10,6 +10,7 @@ from telegram.ext import (
 )
 
 from config import TELEGRAM_CHAT_ID, TELEGRAM_TOKEN
+from handlers.meal import handle_photo, handle_text
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -31,16 +32,13 @@ def auth_check(func):
 
 
 @auth_check
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """暫時回覆收到的文字，確認接線正常。"""
-    await update.message.reply_text(f"收到文字：{update.message.text}")
+async def _handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await handle_text(update, context)
 
 
 @auth_check
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """暫時回覆收到照片，確認接線正常。"""
-    caption = update.message.caption or ""
-    await update.message.reply_text(f"收到照片（caption: {caption}）")
+async def _handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await handle_photo(update, context)
 
 
 @auth_check
@@ -52,8 +50,8 @@ def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.PHOTO, _handle_photo))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_text))
 
     logger.info("Bot started. Listening for chat_id=%s", TELEGRAM_CHAT_ID)
     app.run_polling()
