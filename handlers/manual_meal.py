@@ -125,7 +125,7 @@ async def handle_manual_meal(update: Update, context: ContextTypes.DEFAULT_TYPE,
         carbs_g=data["carbs_g"],
         fat_g=data["fat_g"],
         raw_input=update.message.text,
-        ai_confidence="manual",
+        ai_confidence="high",
         input_tokens=0,
         output_tokens=0,
     )
@@ -175,7 +175,8 @@ async def handle_manual_command(update: Update, context: ContextTypes.DEFAULT_TY
     """處理 /m 指令的手動輸入。"""
     text = update.message.text
     # 把 /m 轉成 @ 格式，複用同一個解析器
-    content = text.split(maxsplit=1)[1] if len(text.split(maxsplit=1)) > 1 else ""
+    parts = text.split(maxsplit=1)
+    content = parts[1] if len(parts) > 1 else ""
     if not content:
         await update.message.reply_text(
             "用法：\n"
