@@ -16,9 +16,8 @@ TW_TZ = timezone(timedelta(hours=8))
 MEAL_TIME_RANGES = [
     (5, 11, "早餐"),
     (11, 15, "午餐"),
-    (15, 18, "下午茶"),
-    (18, 22, "晚餐"),
-    # 22-5 → 宵夜（default）
+    (15, 22, "晚餐"),
+    # 22-5 → 其他（default）
 ]
 
 
@@ -28,7 +27,7 @@ def _infer_meal_type() -> str:
     for start, end, name in MEAL_TIME_RANGES:
         if start <= hour < end:
             return name
-    return "宵夜"
+    return "其他"
 
 
 def _format_number(n: int) -> str:
@@ -96,6 +95,8 @@ async def _process_food(
         has_image=image_path is not None,
         image_path=image_path,
         image_expires_at=image_expires,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
     )
 
     # 計算今日累計

@@ -10,14 +10,13 @@ logger = logging.getLogger(__name__)
 MEAL_TYPE_MAP = {
     "1": "早餐",
     "2": "午餐",
-    "3": "下午茶",
-    "4": "晚餐",
-    "5": "宵夜",
+    "3": "晚餐",
+    "4": "其他",
 }
 
 
 def is_meal_type_correction(text: str) -> bool:
-    """判斷是否為餐別覆蓋指令（回覆訊息 + 數字 1-5）。"""
+    """判斷是否為餐別覆蓋指令（數字 1-4）。"""
     return text.strip() in MEAL_TYPE_MAP
 
 

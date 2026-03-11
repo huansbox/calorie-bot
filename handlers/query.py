@@ -59,7 +59,7 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             lines.append(f"熱量盈餘：+{_fmt(deficit)} kcal")
     else:
-        lines.append("今日尚未記錄 TDEE（/tdee <數字>）")
+        lines.append("今日尚未記錄 TDEE（/t <活動消耗> n）")
 
     lines.append("")
     lines.append(f"目標攝取參考：{_fmt(DAILY_CALORIE_GOAL)} kcal")

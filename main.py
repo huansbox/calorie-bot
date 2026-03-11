@@ -90,9 +90,9 @@ def main():
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("w", _cmd_weight))
-    app.add_handler(CommandHandler("tdee", _cmd_tdee))
-    app.add_handler(CommandHandler("today", _cmd_today))
-    app.add_handler(CommandHandler("undo", _cmd_undo))
+    app.add_handler(CommandHandler("t", _cmd_tdee))
+    app.add_handler(CommandHandler("s", _cmd_today))
+    app.add_handler(CommandHandler("u", _cmd_undo))
     app.add_handler(MessageHandler(filters.PHOTO, _handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_text))
 

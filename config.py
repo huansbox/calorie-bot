@@ -12,6 +12,7 @@ SUPABASE_URL: str = os.environ["SUPABASE_URL"]
 SUPABASE_KEY: str = os.environ["SUPABASE_KEY"]
 
 DAILY_CALORIE_GOAL: int = int(os.getenv("DAILY_CALORIE_GOAL", "2000"))
-PUSH_HOUR: int = int(os.getenv("PUSH_HOUR", "21"))
+BMR: int = int(os.getenv("BMR", "1577"))
+PUSH_HOUR: int = int(os.getenv("PUSH_HOUR", "8"))
 DATA_DIR: Path = Path(os.getenv("DATA_DIR", "./data"))
 MEDIA_DIR: Path = DATA_DIR / "media"

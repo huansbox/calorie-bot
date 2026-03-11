@@ -42,6 +42,8 @@ class FoodAnalysis:
     fat_g: float
     confidence: str
     note: str
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 def parse_ai_response(raw: str) -> FoodAnalysis:
@@ -128,4 +130,7 @@ async def analyze_food(
 
     raw = response.content[0].text
     logger.info("Claude raw response: %s", raw)
-    return parse_ai_response(raw)
+    result = parse_ai_response(raw)
+    result.input_tokens = response.usage.input_tokens
+    result.output_tokens = response.usage.output_tokens
+    return result

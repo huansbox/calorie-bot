@@ -24,6 +24,8 @@ def insert_meal(
     has_image: bool = False,
     image_path: str | None = None,
     image_expires_at: str | None = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
 ) -> dict:
     """新增一筆飲食記錄，回傳插入的 row。"""
     row = {
@@ -38,6 +40,8 @@ def insert_meal(
         "has_image": has_image,
         "image_path": image_path,
         "image_expires_at": image_expires_at,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
     }
     result = supabase.table("meals").insert(row).execute()
     logger.info("Inserted meal: %s", result.data[0]["id"])
@@ -63,6 +67,44 @@ def get_today_meals(tz_offset: int = 8) -> list[dict]:
         .execute()
     )
     return result.data
+
+
+def get_meals_by_date(target_date: date, tz_offset: int = 8) -> list[dict]:
+    """取得指定日期的所有飲食記錄（依台灣時間）。"""
+    from datetime import timedelta
+
+    start = datetime(target_date.year, target_date.month, target_date.day, tzinfo=timezone.utc)
+    utc_start = start - timedelta(hours=tz_offset)
+    utc_end = utc_start + timedelta(days=1)
+
+    result = (
+        supabase.table("meals")
+        .select("*")
+        .gte("recorded_at", utc_start.isoformat())
+        .lt("recorded_at", utc_end.isoformat())
+        .order("recorded_at")
+        .execute()
+    )
+    return result.data
+
+
+def get_weekly_token_usage(tz_offset: int = 8) -> dict:
+    """取得過去 7 天的 token 用量總計。"""
+    from datetime import timedelta
+
+    now_tw = datetime.now(timezone.utc) + timedelta(hours=tz_offset)
+    week_ago = now_tw.date() - timedelta(days=7)
+    utc_start = datetime(week_ago.year, week_ago.month, week_ago.day, tzinfo=timezone.utc) - timedelta(hours=tz_offset)
+
+    result = (
+        supabase.table("meals")
+        .select("input_tokens, output_tokens")
+        .gte("recorded_at", utc_start.isoformat())
+        .execute()
+    )
+    total_input = sum(r.get("input_tokens", 0) or 0 for r in result.data)
+    total_output = sum(r.get("output_tokens", 0) or 0 for r in result.data)
+    return {"input_tokens": total_input, "output_tokens": total_output, "count": len(result.data)}
 
 
 def get_last_meal() -> dict | None:
@@ -139,6 +181,17 @@ def upsert_tdee(tdee_kcal: int, target_date: date | None = None) -> dict:
     )
     logger.info("Upserted TDEE: %s kcal for %s", tdee_kcal, target_date)
     return result.data[0]
+
+
+def get_tdee_by_date(target_date: date) -> dict | None:
+    """取得指定日期的 TDEE 記錄。"""
+    result = (
+        supabase.table("daily_tdee")
+        .select("*")
+        .eq("date", target_date.isoformat())
+        .execute()
+    )
+    return result.data[0] if result.data else None
 
 
 def get_today_tdee(tz_offset: int = 8) -> dict | None:
