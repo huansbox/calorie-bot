@@ -18,16 +18,16 @@
 
 ```
 main.py              # 進入點，註冊 handlers + 排程，auth_check decorator
-config.py            # 環境變數讀取 (dotenv)
-scheduler.py         # 每日 21:00 推播 + 03:00 照片清理
+config.py            # 環境變數讀取 (dotenv)，含 BMR 設定
+scheduler.py         # 每日 08:00 昨日摘要 + 週日 08:05 API 週報 + 03:00 照片清理
 handlers/
-  meal.py            # 食物記錄核心 (文字/照片 → AI 分析 → DB → 回覆)
+  meal.py            # 食物記錄核心 (文字/照片 → AI 分析 → DB → 回覆)，含 token 追蹤
   weight.py          # /w 體重記錄
-  tdee.py            # /tdee 每日消耗記錄
-  query.py           # /today 今日摘要
-  correction.py      # 餐別覆蓋 (1-5) + /undo
+  tdee.py            # /t 每日消耗記錄（預設昨天，加 n 記今天，自動加 BMR）
+  query.py           # /s 今日摘要
+  correction.py      # 餐別覆蓋 (1-4) + /u 撤銷
 services/
-  ai.py              # Claude API 呼叫, parse_ai_response (有單元測試)
+  ai.py              # Claude API 呼叫, parse_ai_response (有單元測試)，回傳 token 用量
   db.py              # Supabase CRUD (meals, weight_logs, daily_tdee)
 tests/
   test_ai.py         # parse_ai_response 單元測試 (7 cases)
@@ -44,9 +44,12 @@ tests/
 
 - **polling 模式** (非 webhook)：簡單、不需公開 URL
 - **auth_check decorator**：單人 Bot，所有 handler 統一用 chat_id 驗證
-- **餐別自動推斷**：依台灣時間 (UTC+8) 判斷，使用者可用 1-5 覆蓋
+- **餐別**：早餐/午餐/晚餐/其他，依台灣時間自動推斷，使用者可用 1-4 覆蓋
+- **TDEE = BMR + 活動消耗**：BMR 固定值存 .env，/t 只需輸入手錶活動消耗
+- **/t 預設記昨天**：符合早上看手錶輸入昨日消耗的使用情境
 - **AI JSON 容錯**：parse_ai_response 處理 code fence、畸形 JSON (如 `>` 替代 `:`)
 - **圖片 24 小時過期**：暫存 data/media/，排程清理
+- **API 費用追蹤**：每筆 meal 記錄 input/output tokens，週日推播週報
 
 ## VPS 資訊
 
