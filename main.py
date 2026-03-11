@@ -12,6 +12,13 @@ from telegram.ext import (
 
 from config import TELEGRAM_CHAT_ID, TELEGRAM_TOKEN
 from handlers.correction import cmd_undo, handle_meal_type_correction, is_meal_type_correction
+from handlers.manual_meal import (
+    handle_at_input,
+    handle_bot_reply_paste,
+    handle_manual_command,
+    is_at_manual_input,
+    is_bot_reply_format,
+)
 from handlers.meal import handle_photo, handle_text
 from handlers.tdee import cmd_tdee
 from handlers.query import cmd_today
@@ -43,6 +50,12 @@ async def _handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_meal_type_correction(text):
         await handle_meal_type_correction(update, context)
         return
+    if is_bot_reply_format(text):
+        await handle_bot_reply_paste(update, context)
+        return
+    if is_at_manual_input(text):
+        await handle_at_input(update, context)
+        return
     await handle_text(update, context)
 
 
@@ -64,6 +77,11 @@ async def _cmd_tdee(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @auth_check
 async def _cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await cmd_today(update, context)
+
+
+@auth_check
+async def _cmd_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await handle_manual_command(update, context)
 
 
 @auth_check
@@ -89,6 +107,7 @@ def main():
     )
 
     app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("m", _cmd_manual))
     app.add_handler(CommandHandler("w", _cmd_weight))
     app.add_handler(CommandHandler("t", _cmd_tdee))
     app.add_handler(CommandHandler("s", _cmd_today))
