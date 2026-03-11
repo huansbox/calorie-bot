@@ -2,14 +2,16 @@
 
 ## 專案概述
 
-個人用 Telegram 體重管理 Bot。使用者透過 Telegram 傳食物照片或文字，Claude Vision 自動分析三大營養素並記錄至 Supabase。
+個人用 Telegram 體重管理 Bot。使用者透過 Telegram 傳食物照片或文字，AI Vision 自動分析三大營養素並記錄至 Supabase。
 
 ## 技術架構
 
 - **語言**: Python 3.12
 - **套件管理**: uv
 - **Bot 框架**: python-telegram-bot v22 (polling 模式)
-- **AI**: Anthropic Claude API (claude-sonnet-4-6, Vision)
+- **AI**: 雙引擎架構，透過 AI_PROVIDER 切換
+  - Gemini 2.5 Pro (預設，JSON mode 強制合法輸出)
+  - Claude Sonnet 4.6 (備選，parse_ai_response 容錯解析)
 - **資料庫**: Supabase (PostgreSQL) — meals, weight_logs, daily_tdee 三張表
 - **排程**: APScheduler (AsyncIOScheduler)
 - **部署**: RackNerd VPS (Ubuntu 24.04, systemd 管理)
@@ -27,7 +29,7 @@ handlers/
   query.py           # /s 今日摘要
   correction.py      # 餐別覆蓋 (1-4) + /u 撤銷
 services/
-  ai.py              # Claude API 呼叫, parse_ai_response (有單元測試)，回傳 token 用量
+  ai.py              # AI 雙引擎 (Gemini/Claude)，SYSTEM_PROMPT，parse_ai_response (有單元測試)
   db.py              # Supabase CRUD (meals, weight_logs, daily_tdee)
 tests/
   test_ai.py         # parse_ai_response 單元測試 (7 cases)
@@ -47,7 +49,9 @@ tests/
 - **餐別**：早餐/午餐/晚餐/其他，依台灣時間自動推斷，使用者可用 1-4 覆蓋
 - **TDEE = BMR + 活動消耗**：BMR 固定值存 .env，/t 只需輸入手錶活動消耗
 - **/t 預設記昨天**：符合早上看手錶輸入昨日消耗的使用情境
-- **AI JSON 容錯**：parse_ai_response 處理 code fence、畸形 JSON (如 `>` 替代 `:`)
+- **AI 雙引擎**：AI_PROVIDER 環境變數切換 gemini/claude，共用同一份 SYSTEM_PROMPT
+- **Gemini JSON mode**：response_mime_type + response_json_schema 強制合法 JSON 輸出
+- **Claude JSON 容錯**：parse_ai_response 處理 code fence、畸形 JSON (如 `>` 替代 `:`)
 - **圖片 24 小時過期**：暫存 data/media/，排程清理
 - **API 費用追蹤**：每筆 meal 記錄 input/output tokens，週日推播週報
 
