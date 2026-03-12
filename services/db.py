@@ -228,3 +228,79 @@ def get_expired_images() -> list[dict]:
 def clear_image_path(meal_id: str) -> None:
     """清除指定記錄的 image_path。"""
     supabase.table("meals").update({"image_path": None}).eq("id", meal_id).execute()
+
+
+# ── Food Cache ────────────────────────────────────────
+
+MAX_CACHE_ITEMS = 89  # 編號 11-99
+
+
+def get_all_cache() -> list[dict]:
+    """取得所有快取食物，依建立時間排序。"""
+    result = (
+        supabase.table("food_cache")
+        .select("*")
+        .order("created_at")
+        .execute()
+    )
+    return result.data
+
+
+def get_cache_by_index(index: int) -> dict | None:
+    """依編號取得快取（11 = 第一筆）。"""
+    offset = index - 11
+    if offset < 0:
+        return None
+    result = (
+        supabase.table("food_cache")
+        .select("*")
+        .order("created_at")
+        .limit(1)
+        .offset(offset)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
+def insert_cache(description: str, calories: int, protein_g: float, carbs_g: float, fat_g: float) -> dict:
+    """新增快取食物。"""
+    row = {
+        "description": description,
+        "calories": calories,
+        "protein_g": protein_g,
+        "carbs_g": carbs_g,
+        "fat_g": fat_g,
+    }
+    result = supabase.table("food_cache").insert(row).execute()
+    logger.info("Inserted cache: %s", description)
+    return result.data[0]
+
+
+def delete_cache_by_name(description: str) -> bool:
+    """依品名刪除快取，回傳是否有刪除。"""
+    result = supabase.table("food_cache").delete().eq("description", description).execute()
+    return len(result.data) > 0
+
+
+def cache_exists(description: str) -> bool:
+    """檢查品名是否已在快取中。"""
+    result = (
+        supabase.table("food_cache")
+        .select("id")
+        .eq("description", description)
+        .limit(1)
+        .execute()
+    )
+    return len(result.data) > 0
+
+
+def get_meal_by_id(meal_id: str) -> dict | None:
+    """依 ID 取得單筆 meal 記錄。"""
+    result = (
+        supabase.table("meals")
+        .select("*")
+        .eq("id", meal_id)
+        .limit(1)
+        .execute()
+    )
+    return result.data[0] if result.data else None

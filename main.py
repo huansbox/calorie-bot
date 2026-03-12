@@ -4,6 +4,7 @@ from telegram import Update
 from telegram.ext import (
     Application,
     ApplicationBuilder,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -19,6 +20,7 @@ from handlers.manual_meal import (
     is_at_manual_input,
     is_bot_reply_format,
 )
+from handlers.food_cache import cmd_food_cache, handle_cache_callback, handle_cache_number, is_cache_number
 from handlers.goal import cmd_goal
 from handlers.meal import handle_photo, handle_text
 from handlers.tdee import cmd_tdee
@@ -50,6 +52,9 @@ async def _handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if is_meal_type_correction(text):
         await handle_meal_type_correction(update, context)
+        return
+    if is_cache_number(text):
+        await handle_cache_number(update, context)
         return
     if is_bot_reply_format(text):
         await handle_bot_reply_paste(update, context)
@@ -96,6 +101,16 @@ async def _cmd_goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @auth_check
+async def _cmd_food_cache(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await cmd_food_cache(update, context)
+
+
+@auth_check
+async def _handle_cache_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await handle_cache_callback(update, context)
+
+
+@auth_check
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Calorie Bot 啟動完成，直接傳食物照片或文字即可記錄。")
 
@@ -119,6 +134,8 @@ def main():
     app.add_handler(CommandHandler("s", _cmd_today))
     app.add_handler(CommandHandler("u", _cmd_undo))
     app.add_handler(CommandHandler("g", _cmd_goal))
+    app.add_handler(CommandHandler("f", _cmd_food_cache))
+    app.add_handler(CallbackQueryHandler(_handle_cache_callback))
     app.add_handler(MessageHandler(filters.PHOTO, _handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_text))
 
