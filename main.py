@@ -135,7 +135,7 @@ def main():
     app.add_handler(CommandHandler("u", _cmd_undo))
     app.add_handler(CommandHandler("g", _cmd_goal))
     app.add_handler(CommandHandler("f", _cmd_food_cache))
-    app.add_handler(CallbackQueryHandler(_handle_cache_callback))
+    app.add_handler(CallbackQueryHandler(_handle_cache_callback, pattern="^cache:"))
     app.add_handler(MessageHandler(filters.PHOTO, _handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_text))
 

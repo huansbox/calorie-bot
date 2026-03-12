@@ -32,9 +32,9 @@ def _infer_meal_type() -> str:
     return "其他"
 
 
-def _format_number(n: int) -> str:
+def _format_number(n: int | float) -> str:
     """數字加千分位逗號。"""
-    return f"{n:,}"
+    return f"{int(n):,}"
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
