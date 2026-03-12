@@ -80,12 +80,11 @@ uv run pytest tests/ -v
 ### 首次部署
 
 ```bash
-# 本機上傳
-scp -r *.py pyproject.toml uv.lock .env handlers services root@<VPS_IP>:/home/botuser/calorie-bot/
-
 # VPS 上
 su - botuser
 cd ~/calorie-bot
+git clone https://github.com/huansbox/calorie-bot.git .
+cp /path/to/.env .env   # 手動放入環境變數檔
 mkdir -p data/media
 uv sync
 ```
@@ -122,10 +121,5 @@ systemctl stop calorie-bot       # 停止
 ### 更新部署
 
 ```bash
-# 本機
-scp -r *.py handlers services root@<VPS_IP>:/home/botuser/calorie-bot/
-
-# VPS
-chown -R botuser:botuser /home/botuser/calorie-bot
-systemctl restart calorie-bot
+ssh root@107.175.30.172 "cd /home/botuser/calorie-bot && sudo -u botuser git pull origin main && sudo systemctl restart calorie-bot"
 ```
