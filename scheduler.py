@@ -6,6 +6,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram.ext import Application
 
 from config import DAILY_CALORIE_GOAL, PUSH_HOUR, TELEGRAM_CHAT_ID
+from services.nutrition import format_macros
 from services.db import (
     clear_image_path,
     get_expired_images,
@@ -44,7 +45,7 @@ async def daily_summary(app: Application):
         f"📊 昨日摘要（{date_str}）",
         "",
         f"攝取：{_fmt(total_cal)} kcal　目標參考：{_fmt(DAILY_CALORIE_GOAL)} kcal",
-        f"蛋白質：{total_protein:.0f}g　碳水：{total_carbs:.0f}g　脂肪：{total_fat:.0f}g",
+        *format_macros(total_protein, total_carbs, total_fat),
         f"記錄筆數：{len(meals)} 餐",
     ]
 
