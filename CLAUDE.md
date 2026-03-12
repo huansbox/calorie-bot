@@ -12,7 +12,7 @@
 - **AI**: 雙引擎架構，透過 AI_PROVIDER 切換
   - Gemini 2.5 Pro (預設，JSON mode 強制合法輸出)
   - Claude Sonnet 4.6 (備選，parse_ai_response 容錯解析)
-- **資料庫**: Supabase (PostgreSQL) — meals, weight_logs, daily_tdee 三張表
+- **資料庫**: Supabase (PostgreSQL) — meals, weight_logs, daily_tdee, food_cache 四張表
 - **排程**: APScheduler (AsyncIOScheduler)
 - **部署**: RackNerd VPS (Ubuntu 24.04, systemd 管理)
 
@@ -29,12 +29,16 @@ handlers/
   query.py           # /s 今日摘要
   correction.py      # 餐別覆蓋 (1-4) + /u 撤銷
   manual_meal.py     # 手動記錄 (Bot 回覆貼上 / @前綴 / /m 指令)，免 AI 分析
+  goal.py            # /g 動態調整每日熱量目標
+  food_cache.py      # 食物快取：Inline Button 加入、/f 管理、數字 11-99 快速記錄
 services/
   ai.py              # AI 雙引擎 (Gemini/Claude)，SYSTEM_PROMPT，parse_ai_response (有單元測試)
-  db.py              # Supabase CRUD (meals, weight_logs, daily_tdee)
+  db.py              # Supabase CRUD (meals, weight_logs, daily_tdee, food_cache)
+  nutrition.py       # 營養素計算 (三大營養素→熱量) + 格式化 (含百分比)
 tests/
-  test_ai.py         # parse_ai_response 單元測試 (7 cases)
+  test_ai.py         # parse_ai_response 單元測試 (9 cases)
   test_manual_meal.py # 手動記錄解析函式測試
+  test_nutrition.py  # 營養素計算與格式化測試
 ```
 
 ## 開發慣例
@@ -57,6 +61,10 @@ tests/
 - **圖片 24 小時過期**：暫存 data/media/，排程清理
 - **API 費用追蹤**：每筆 meal 記錄 input/output tokens，週日推播週報
 - **手動記錄**：三種免 AI 輸入方式 — 貼上 Bot 回覆、@前綴快速輸入、/m 指令
+- **熱量計算**：AI 只回傳三大營養素重量，程式端用 4-4-9 公式算熱量，回覆含百分比
+- **每日目標**：/g 動態調整（記憶體內，重啟回 .env 預設值）
+- **食物快取**：常吃食物存 food_cache 表，記錄完成後 Inline Button 一鍵加入，/f 列出清單，輸入編號 11-99 直接記錄
+- **數字路由**：1-4 餐別覆蓋、11-99 快取記錄，不衝突
 
 ## 未來想做
 
@@ -65,8 +73,7 @@ tests/
 - 運動單次消耗記錄
 - 語音輸入
 - Web Dashboard
-- 食物資料庫：個人常吃快取、衛福部 TFDA API、自訂食物別名
-- Bot 指令修改每日攝取目標（/g），免改 .env 重啟
+- 食物資料庫：衛福部 TFDA API、自訂食物別名
 
 ## 部署
 
