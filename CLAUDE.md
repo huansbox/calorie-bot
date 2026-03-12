@@ -21,7 +21,7 @@
 ```
 main.py              # 進入點，註冊 handlers + 排程，auth_check decorator
 config.py            # 環境變數讀取 (dotenv)，含 BMR 設定
-scheduler.py         # 每日 08:00 昨日摘要 + 週日 08:05 API 週報 + 03:00 照片清理
+scheduler.py         # 每日 08:00 昨日摘要 + 週一 08:10 營養週報 + 週日 08:05 API 週報 + 03:00 照片清理
 handlers/
   meal.py            # 食物記錄核心 (文字/照片 → AI 分析 → DB → 回覆)，含 token 追蹤
   weight.py          # /w 體重記錄
@@ -31,6 +31,7 @@ handlers/
   manual_meal.py     # 手動記錄 (Bot 回覆貼上 / @前綴 / /m 指令)，免 AI 分析
   goal.py            # /g 動態調整每日熱量目標
   food_cache.py      # 食物快取：Inline Button 加入、/f 管理、數字 11-99 快速記錄
+  report.py          # /r 週報 + /r now 本週至今，週一自動推播
 services/
   ai.py              # AI 雙引擎 (Gemini/Claude)，SYSTEM_PROMPT，parse_ai_response (有單元測試)
   db.py              # Supabase CRUD (meals, weight_logs, daily_tdee, food_cache)
@@ -65,10 +66,11 @@ tests/
 - **每日目標**：/g 動態調整（記憶體內，重啟回 .env 預設值）
 - **食物快取**：常吃食物存 food_cache 表，記錄完成後 Inline Button 一鍵加入，/f 列出清單，輸入編號 11-99 直接記錄
 - **數字路由**：1-4 餐別覆蓋、11-99 快取記錄，不衝突
+- **週報**：/r 上週、/r now 本週至今，六區塊（每日收支、營養素結構、正餐比例、累積收支、體重預估vs實際、週對週），未記錄 TDEE 的天數用 BMR 補位（標 *）
 
 ## 未來想做
 
-- 週報 / 月報統計
+- 月報統計
 - 條碼掃描（拍條碼照片 → pyzbar 解碼 → 查食品資料庫）
 - 運動單次消耗記錄
 - 語音輸入
