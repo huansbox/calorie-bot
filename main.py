@@ -19,6 +19,7 @@ from handlers.manual_meal import (
     is_at_manual_input,
     is_bot_reply_format,
 )
+from handlers.goal import cmd_goal
 from handlers.meal import handle_photo, handle_text
 from handlers.tdee import cmd_tdee
 from handlers.query import cmd_today
@@ -90,6 +91,11 @@ async def _cmd_undo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @auth_check
+async def _cmd_goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await cmd_goal(update, context)
+
+
+@auth_check
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Calorie Bot 啟動完成，直接傳食物照片或文字即可記錄。")
 
@@ -112,6 +118,7 @@ def main():
     app.add_handler(CommandHandler("t", _cmd_tdee))
     app.add_handler(CommandHandler("s", _cmd_today))
     app.add_handler(CommandHandler("u", _cmd_undo))
+    app.add_handler(CommandHandler("g", _cmd_goal))
     app.add_handler(MessageHandler(filters.PHOTO, _handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_text))
 

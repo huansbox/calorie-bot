@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from config import DAILY_CALORIE_GOAL, MEDIA_DIR
+from config import MEDIA_DIR, get_calorie_goal
 from services.ai import analyze_food
 from services.db import get_today_meals, insert_meal
 from services.nutrition import format_macros
@@ -112,7 +112,7 @@ async def _process_food(
         *format_macros(result.protein_g, result.carbs_g, result.fat_g),
         f"餐別：{meal_type}",
         "",
-        f"今日累計：{_format_number(total_cal)} / {_format_number(DAILY_CALORIE_GOAL)} kcal",
+        f"今日累計：{_format_number(total_cal)} / {_format_number(get_calorie_goal())} kcal",
     ]
 
     if result.confidence == "low":
