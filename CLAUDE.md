@@ -68,6 +68,18 @@ tests/
 - 食物資料庫：個人常吃快取、衛福部 TFDA API、自訂食物別名
 - Bot 指令修改每日攝取目標（/g），免改 .env 重啟
 
+## 待辦：設定本機 SSH key 連 VPS
+
+目標：讓 Claude Code 能直接 SSH 進 VPS 執行部署（git pull + restart service）。
+
+步驟：
+1. 本機產生 SSH key：`ssh-keygen -t ed25519 -C "calobot-vps"`
+2. 把公鑰加到 VPS：`ssh-copy-id root@107.175.30.172`（需使用者輸入一次 VPS 密碼）
+3. 驗證連線：`ssh root@107.175.30.172 "echo connected"`
+4. 部署指令：`ssh root@107.175.30.172 "cd /home/botuser/calorie-bot && sudo -u botuser git pull origin main && sudo systemctl restart calorie-bot"`
+
+注意：步驟 2 需要使用者互動輸入密碼，Claude Code 無法代勞。
+
 ## VPS 資訊
 
 - IP: 107.175.30.172
