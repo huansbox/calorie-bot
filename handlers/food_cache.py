@@ -166,8 +166,11 @@ async def handle_cache_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     if cache_exists(meal["description"]):
+        mtype_only = InlineKeyboardMarkup([
+            [InlineKeyboardButton("改為其他", callback_data=f"mtype:{meal_id}")]
+        ])
         await query.answer("已在快取中")
-        await query.edit_message_reply_markup(reply_markup=None)
+        await query.edit_message_reply_markup(reply_markup=mtype_only)
         return
 
     items = get_all_cache()
@@ -184,8 +187,13 @@ async def handle_cache_callback(update: Update, context: ContextTypes.DEFAULT_TY
         fat_g=meal["fat_g"],
     )
 
+    # 只保留「改為其他」按鈕
+    mtype_only = InlineKeyboardMarkup([
+        [InlineKeyboardButton("改為其他", callback_data=f"mtype:{meal_id}")]
+    ])
+
     await query.answer(f"已加入快取：{meal['description']}")
-    await query.edit_message_reply_markup(reply_markup=None)
+    await query.edit_message_reply_markup(reply_markup=mtype_only)
 
 
 async def handle_mtype_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
