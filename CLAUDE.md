@@ -28,18 +28,20 @@ handlers/
   tdee.py            # /t 每日消耗記錄（預設昨天，加 n 記今天，自動加 BMR）
   query.py           # /s 今日摘要
   correction.py      # 餐別覆蓋 (1-4) + /u 撤銷
+  manual_meal.py     # 手動記錄 (Bot 回覆貼上 / @前綴 / /m 指令)，免 AI 分析
 services/
   ai.py              # AI 雙引擎 (Gemini/Claude)，SYSTEM_PROMPT，parse_ai_response (有單元測試)
   db.py              # Supabase CRUD (meals, weight_logs, daily_tdee)
 tests/
   test_ai.py         # parse_ai_response 單元測試 (7 cases)
+  test_manual_meal.py # 手動記錄解析函式測試
 ```
 
 ## 開發慣例
 
 - 所有變更開 feature branch，合併回 main
 - Commit 遵循 Conventional Commits
-- 僅 services/ai.py 的 JSON 解析有單元測試
+- 單元測試涵蓋 services/ai.py (JSON 解析) 與 handlers/manual_meal.py (輸入解析)
 - Windows 開發環境需設 PYTHONIOENCODING=utf-8
 
 ## 關鍵設計決策
@@ -54,10 +56,22 @@ tests/
 - **Claude JSON 容錯**：parse_ai_response 處理 code fence、畸形 JSON (如 `>` 替代 `:`)
 - **圖片 24 小時過期**：暫存 data/media/，排程清理
 - **API 費用追蹤**：每筆 meal 記錄 input/output tokens，週日推播週報
+- **手動記錄**：三種免 AI 輸入方式 — 貼上 Bot 回覆、@前綴快速輸入、/m 指令
+
+## 未來想做
+
+- 週報 / 月報統計
+- 條碼掃描（拍條碼照片 → pyzbar 解碼 → 查食品資料庫）
+- 運動單次消耗記錄
+- 語音輸入
+- Web Dashboard
+- 食物資料庫：個人常吃快取、衛福部 TFDA API、自訂食物別名
+- Bot 指令修改每日攝取目標（/g），免改 .env 重啟
 
 ## VPS 資訊
 
 - IP: 107.175.30.172
-- User: botuser
+- SSH: root@107.175.30.172
+- Bot 執行帳號: botuser
 - 專案路徑: /home/botuser/calorie-bot
 - 服務名稱: calorie-bot.service
