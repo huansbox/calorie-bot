@@ -121,6 +121,7 @@ async def handle_manual_meal(update: Update, context: ContextTypes.DEFAULT_TYPE,
     from config import get_calorie_goal
     from handlers.meal import _infer_meal_type, _format_number
     from services.db import get_today_meals, insert_meal
+    from handlers.food_cache import make_cache_button
     from services.nutrition import format_macros
 
     meal_type = _infer_meal_type()
@@ -151,7 +152,10 @@ async def handle_manual_meal(update: Update, context: ContextTypes.DEFAULT_TYPE,
         f"今日累計：{_format_number(total_cal)} / {_format_number(get_calorie_goal())} kcal",
     ]
 
-    msg = await update.message.reply_text("\n".join(lines))
+    msg = await update.message.reply_text(
+        "\n".join(lines),
+        reply_markup=make_cache_button(row["id"]),
+    )
 
     context.user_data["last_meal_id"] = row["id"]
     context.user_data["last_meal_message_id"] = msg.message_id

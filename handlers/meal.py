@@ -6,6 +6,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from config import MEDIA_DIR, get_calorie_goal
+from handlers.food_cache import make_cache_button
 from services.ai import analyze_food
 from services.db import get_today_meals, insert_meal
 from services.nutrition import format_macros
@@ -122,7 +123,10 @@ async def _process_food(
     if result.note:
         lines.append(f"📝 {result.note}")
 
-    await processing_msg.edit_text("\n".join(lines))
+    await processing_msg.edit_text(
+        "\n".join(lines),
+        reply_markup=make_cache_button(row["id"]),
+    )
 
     # 儲存 meal_id 到 context，供 correction handler 使用
     context.user_data["last_meal_id"] = row["id"]
