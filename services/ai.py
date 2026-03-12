@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 
 from config import AI_PROVIDER, ANTHROPIC_API_KEY, GEMINI_API_KEY
+from services.nutrition import calc_calories
 
 logger = logging.getLogger(__name__)
 
@@ -36,11 +37,6 @@ SYSTEM_PROMPT = """\
 - 使用者手掌（不含手指）約 10×9cm，照片中可作為比例尺
 - 一顆雞蛋 ≈ 55g
 
-【數值一致性規則】
-輸出前必須校驗：
-calories ≈ protein_g × 4 + carbs_g × 4 + fat_g × 9（誤差 ≤ 5%）
-不一致時，以 macro 推算值調整 calories。
-
 【confidence 標準】
 - high：食物種類與份量皆明確
 - medium：食物種類明確但份量需推估
@@ -49,14 +45,13 @@ calories ≈ protein_g × 4 + carbs_g × 4 + fat_g × 9（誤差 ≤ 5%）
 【範例】
 輸入：「滷肉飯加蛋」
 輸出：
-{"description":"滷肉飯加蛋","calories":570,"protein_g":24.0,"carbs_g":72.0,"fat_g":19.0,"confidence":"medium","note":"白飯200g≈260kcal + 滷肉醬80g≈200kcal + 荷包蛋55g≈90kcal + 烹調油≈20kcal"}"""
+{"description":"滷肉飯加蛋","protein_g":24.0,"carbs_g":72.0,"fat_g":19.0,"confidence":"medium","note":"白飯200g + 滷肉醬80g + 荷包蛋55g + 烹調油"}"""
 
 FOOD_JSON_SCHEMA = {
     "type": "object",
-    "required": ["description", "calories", "protein_g", "carbs_g", "fat_g", "confidence", "note"],
+    "required": ["description", "protein_g", "carbs_g", "fat_g", "confidence", "note"],
     "properties": {
         "description": {"type": "string"},
-        "calories": {"type": "integer"},
         "protein_g": {"type": "number"},
         "carbs_g": {"type": "number"},
         "fat_g": {"type": "number"},
@@ -109,12 +104,16 @@ def parse_ai_response(raw: str) -> FoodAnalysis:
             logger.error("無法解析 AI 回傳: %s", raw)
             raise ValueError(f"AI 回傳無法解析的格式: {raw[:200]}")
 
+    protein_g = float(data["protein_g"])
+    carbs_g = float(data["carbs_g"])
+    fat_g = float(data["fat_g"])
+
     return FoodAnalysis(
         description=data["description"],
-        calories=int(data["calories"]),
-        protein_g=float(data["protein_g"]),
-        carbs_g=float(data["carbs_g"]),
-        fat_g=float(data["fat_g"]),
+        calories=calc_calories(protein_g, carbs_g, fat_g),
+        protein_g=protein_g,
+        carbs_g=carbs_g,
+        fat_g=fat_g,
         confidence=data["confidence"],
         note=data.get("note", ""),
     )
@@ -180,12 +179,16 @@ async def _analyze_gemini(
         input_tokens = response.usage_metadata.prompt_token_count or 0
         output_tokens = response.usage_metadata.candidates_token_count or 0
 
+    protein_g = float(data["protein_g"])
+    carbs_g = float(data["carbs_g"])
+    fat_g = float(data["fat_g"])
+
     return FoodAnalysis(
         description=data["description"],
-        calories=int(data["calories"]),
-        protein_g=float(data["protein_g"]),
-        carbs_g=float(data["carbs_g"]),
-        fat_g=float(data["fat_g"]),
+        calories=calc_calories(protein_g, carbs_g, fat_g),
+        protein_g=protein_g,
+        carbs_g=carbs_g,
+        fat_g=fat_g,
         confidence=data["confidence"],
         note=data.get("note", ""),
         input_tokens=input_tokens,
