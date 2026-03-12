@@ -79,7 +79,7 @@ def parse_at_input(text: str) -> dict:
         # 嘗試：品名 熱量 蛋白質 碳水 脂肪
         name_parts, nums = parts[:-4], parts[-4:]
         try:
-            calories = int(nums[0])
+            calories = int(round(float(nums[0])))
             protein_g = float(nums[1])
             carbs_g = float(nums[2])
             fat_g = float(nums[3])
@@ -98,7 +98,7 @@ def parse_at_input(text: str) -> dict:
         # 嘗試：品名 熱量
         name_parts, num = parts[:-1], parts[-1]
         try:
-            calories = int(num)
+            calories = int(round(float(num)))
             return {
                 "description": " ".join(name_parts),
                 "calories": calories,

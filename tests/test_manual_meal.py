@@ -156,6 +156,20 @@ class TestParseAtInput:
         assert result["carbs_g"] == 12.3
         assert result["fat_g"] == 6.2
 
+    def test_decimal_calories_with_macros(self):
+        result = parse_at_input("@foodB 64.2 2.4 12.1 0.7")
+        assert result["description"] == "foodB"
+        assert result["calories"] == 64
+        assert result["protein_g"] == 2.4
+        assert result["carbs_g"] == 12.1
+        assert result["fat_g"] == 0.7
+
+    def test_decimal_calories_only(self):
+        result = parse_at_input("@咖啡 35.5")
+        assert result["description"] == "咖啡"
+        assert result["calories"] == 36
+        assert result["protein_g"] == 0.0
+
     def test_no_numbers_raises(self):
         with pytest.raises(ValueError):
             parse_at_input("@只有品名沒有數字")
