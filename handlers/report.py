@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from config import BMR
 from services.db import (
     get_meals_by_week,
     get_tdee_by_week,
@@ -46,37 +47,82 @@ def _get_current_week_range() -> tuple[date, date]:
     return this_monday, today
 
 
-def _build_daily_table(
-    start: date,
-    end: date,
-    meals: list[dict],
-    tdee_rows: list[dict],
-) -> list[str]:
-    """產生每日收支表格。"""
+def _build_daily_intake_map(meals: list[dict]) -> dict[date, int]:
+    """按台灣日期分組每日攝取熱量。"""
     daily_cal: dict[date, int] = defaultdict(int)
     for m in meals:
         rec = datetime.fromisoformat(m["recorded_at"])
         tw_date = (rec + timedelta(hours=8)).date()
         daily_cal[tw_date] += m["calories"] or 0
+    return daily_cal
 
-    tdee_map: dict[str, int] = {r["date"]: r["tdee_kcal"] for r in tdee_rows}
 
+def _build_daily_tdee_map(
+    start: date,
+    end: date,
+    daily_cal: dict[date, int],
+    tdee_rows: list[dict],
+) -> dict[date, tuple[int, bool]]:
+    """建立每日消耗 map。回傳 {date: (tdee, is_estimated)}。
+
+    有 TDEE 記錄 → 用實際值 (is_estimated=False)
+    有食物但沒 TDEE → 用 BMR (is_estimated=True)
+    兩者都沒有 → 不在 map 中
+    """
+    tdee_raw: dict[str, int] = {r["date"]: r["tdee_kcal"] for r in tdee_rows}
+    result: dict[date, tuple[int, bool]] = {}
+
+    d = start
+    while d <= end:
+        actual = tdee_raw.get(d.isoformat())
+        has_meals = daily_cal.get(d, 0) > 0
+
+        if actual is not None:
+            result[d] = (actual, False)
+        elif has_meals:
+            result[d] = (BMR, True)
+        # else: 兩者都沒有，不加入 map
+
+        d += timedelta(days=1)
+
+    return result
+
+
+def _build_daily_table(
+    start: date,
+    end: date,
+    daily_cal: dict[date, int],
+    tdee_map: dict[date, tuple[int, bool]],
+) -> list[str]:
+    """產生每日收支表格。"""
     lines = ["── 每日收支 ──"]
+    has_estimated = False
+
     d = start
     while d <= end:
         wd = WEEKDAY_NAMES[d.weekday()]
         ds = _date_str(d)
         intake = daily_cal.get(d, 0)
-        tdee = tdee_map.get(d.isoformat())
+        tdee_entry = tdee_map.get(d)
 
-        if tdee is not None:
+        if tdee_entry is not None:
+            tdee, is_estimated = tdee_entry
             gap = intake - tdee
             mark = " ✅" if gap <= 0 else ""
-            lines.append(f"{ds} {wd}　{_fmt(intake)}　{_fmt(tdee)}　{gap:+,}{mark}")
-        else:
+            star = "*" if is_estimated else ""
+            if is_estimated:
+                has_estimated = True
+            lines.append(f"{ds} {wd}　{_fmt(intake)}　{_fmt(tdee)}{star}　{gap:+,}{mark}")
+        elif intake > 0:
+            # 不應該發生（有食物就有 BMR），但防禦性處理
             lines.append(f"{ds} {wd}　{_fmt(intake)}　--　--")
+        else:
+            lines.append(f"{ds} {wd}　--　--　--")
 
         d += timedelta(days=1)
+
+    if has_estimated:
+        lines.append("* 未記錄消耗，以 BMR 估算")
 
     return lines
 
@@ -125,12 +171,12 @@ def _build_meal_type_section(meals: list[dict]) -> list[str]:
     ]
 
 
-def _build_balance_section(meals: list[dict], tdee_rows: list[dict]) -> list[str]:
+def _build_balance_section(
+    total_intake: int,
+    total_tdee: int,
+    tdee_days: int,
+) -> list[str]:
     """週累積收支。"""
-    total_intake = sum(m["calories"] or 0 for m in meals)
-    total_tdee = sum(r["tdee_kcal"] for r in tdee_rows)
-    tdee_days = len(tdee_rows)
-
     lines = [
         "── 週累積收支 ──",
         f"總攝取：{_fmt(total_intake)} kcal",
@@ -176,31 +222,33 @@ def _build_weight_section(
 
 
 def _build_wow_section(
-    meals: list[dict],
-    tdee_rows: list[dict],
+    total_intake: int,
+    total_tdee: int,
+    tdee_days: int,
     num_days: int,
-    prev_meals: list[dict],
-    prev_tdee_rows: list[dict],
+    prev_total_intake: int,
+    prev_total_tdee: int,
+    prev_tdee_days: int,
 ) -> list[str]:
     """週對週比較。"""
     lines = ["── 週對週 ──"]
 
-    if not prev_meals and not prev_tdee_rows:
+    if prev_total_intake == 0 and prev_tdee_days == 0:
         lines.append("上週無記錄")
         return lines
 
-    def _avg(m: list[dict], t: list[dict], days: int) -> tuple[int, int | None, int | None]:
-        avg_intake = round(sum(r["calories"] or 0 for r in m) / days) if days > 0 else 0
-        if t:
-            avg_tdee = round(sum(r["tdee_kcal"] for r in t) / days)
+    def _daily(intake: int, tdee: int, has_tdee: bool, days: int) -> tuple[int, int | None, int | None]:
+        avg_intake = round(intake / days) if days > 0 else 0
+        if has_tdee:
+            avg_tdee = round(tdee / days)
             avg_gap = avg_intake - avg_tdee
         else:
             avg_tdee = None
             avg_gap = None
         return avg_intake, avg_tdee, avg_gap
 
-    this_avg = _avg(meals, tdee_rows, num_days)
-    prev_avg = _avg(prev_meals, prev_tdee_rows, num_days)
+    this_avg = _daily(total_intake, total_tdee, tdee_days > 0, num_days)
+    prev_avg = _daily(prev_total_intake, prev_total_tdee, prev_tdee_days > 0, num_days)
 
     lines.append("　　　　　本週　　上週")
     lines.append(f"日均攝取　{_fmt(this_avg[0])}　{_fmt(prev_avg[0])}")
@@ -216,6 +264,13 @@ def _build_wow_section(
     return lines
 
 
+def _calc_totals(tdee_map: dict[date, tuple[int, bool]], total_intake: int) -> tuple[int, int]:
+    """從 tdee_map 算出總消耗和有記錄天數。"""
+    total_tdee = sum(v[0] for v in tdee_map.values())
+    tdee_days = len(tdee_map)
+    return total_tdee, tdee_days
+
+
 def generate_report(start: date, end: date, label: str) -> str:
     """產生完整週報文字。"""
     meals = get_meals_by_week(start, end)
@@ -224,25 +279,32 @@ def generate_report(start: date, end: date, label: str) -> str:
 
     num_days = (end - start).days + 1
 
+    # 建立每日 maps
+    daily_cal = _build_daily_intake_map(meals)
+    tdee_map = _build_daily_tdee_map(start, end, daily_cal, tdee_rows)
+
+    # 累積數值
+    total_intake = sum(m["calories"] or 0 for m in meals)
+    total_tdee, tdee_days = _calc_totals(tdee_map, total_intake)
+
     # 上週同期
     prev_start = start - timedelta(days=7)
     prev_end = end - timedelta(days=7)
     prev_meals = get_meals_by_week(prev_start, prev_end)
     prev_tdee_rows = get_tdee_by_week(prev_start, prev_end)
-
-    # 累積數值
-    total_intake = sum(m["calories"] or 0 for m in meals)
-    total_tdee = sum(r["tdee_kcal"] for r in tdee_rows)
-    tdee_days = len(tdee_rows)
+    prev_daily_cal = _build_daily_intake_map(prev_meals)
+    prev_tdee_map = _build_daily_tdee_map(prev_start, prev_end, prev_daily_cal, prev_tdee_rows)
+    prev_total_intake = sum(m["calories"] or 0 for m in prev_meals)
+    prev_total_tdee, prev_tdee_days = _calc_totals(prev_tdee_map, prev_total_intake)
 
     sections = [
         [f"📊 {label}（{_date_str(start)} - {_date_str(end)}）"],
-        _build_daily_table(start, end, meals, tdee_rows),
+        _build_daily_table(start, end, daily_cal, tdee_map),
         _build_macro_section(meals),
         _build_meal_type_section(meals),
-        _build_balance_section(meals, tdee_rows),
+        _build_balance_section(total_intake, total_tdee, tdee_days),
         _build_weight_section(weights, total_intake, total_tdee, tdee_days),
-        _build_wow_section(meals, tdee_rows, num_days, prev_meals, prev_tdee_rows),
+        _build_wow_section(total_intake, total_tdee, tdee_days, num_days, prev_total_intake, prev_total_tdee, prev_tdee_days),
     ]
 
     return "\n\n".join("\n".join(s) for s in sections)
