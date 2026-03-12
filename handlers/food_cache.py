@@ -22,10 +22,13 @@ from services.nutrition import calc_calories, format_macros
 logger = logging.getLogger(__name__)
 
 
-def make_cache_button(meal_id: str) -> InlineKeyboardMarkup:
-    """建立「加入快取」Inline Button。"""
+def make_meal_buttons(meal_id: str) -> InlineKeyboardMarkup:
+    """建立記錄完成後的 Inline Buttons：加入快取 + 改為其他。"""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("加入快取", callback_data=f"cache:{meal_id}")]
+        [
+            InlineKeyboardButton("加入快取", callback_data=f"cache:{meal_id}"),
+            InlineKeyboardButton("改為其他", callback_data=f"mtype:{meal_id}"),
+        ]
     ])
 
 
@@ -183,3 +186,36 @@ async def handle_cache_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     await query.answer(f"已加入快取：{meal['description']}")
     await query.edit_message_reply_markup(reply_markup=None)
+
+
+async def handle_mtype_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """處理 Inline Button callback：改為其他餐別。"""
+    query = update.callback_query
+
+    data = query.data
+    if not data.startswith("mtype:"):
+        await query.answer()
+        return
+
+    meal_id = data[6:]
+    meal = get_meal_by_id(meal_id)
+    if not meal:
+        await query.answer("找不到記錄")
+        await query.edit_message_reply_markup(reply_markup=None)
+        return
+
+    if meal["meal_type"] == "其他":
+        await query.answer("已經是「其他」")
+        return
+
+    from services.db import update_meal
+
+    update_meal(meal_id, {"meal_type": "其他"})
+
+    # 更新訊息中的餐別文字
+    old_text = query.message.text
+    old_type = meal["meal_type"]
+    new_text = old_text.replace(f"餐別：{old_type}", "餐別：其他")
+
+    await query.answer(f"已改為「其他」（原：{old_type}）")
+    await query.edit_message_text(text=new_text, reply_markup=None)

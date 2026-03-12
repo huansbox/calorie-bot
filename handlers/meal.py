@@ -122,11 +122,11 @@ async def _process_food(
     if result.note:
         lines.append(f"📝 {result.note}")
 
-    from handlers.food_cache import make_cache_button
+    from handlers.food_cache import make_meal_buttons
 
     await processing_msg.edit_text(
         "\n".join(lines),
-        reply_markup=make_cache_button(row["id"]),
+        reply_markup=make_meal_buttons(row["id"]),
     )
 
     # 儲存 meal_id 到 context，供 correction handler 使用

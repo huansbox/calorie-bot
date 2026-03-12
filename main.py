@@ -20,7 +20,7 @@ from handlers.manual_meal import (
     is_at_manual_input,
     is_bot_reply_format,
 )
-from handlers.food_cache import cmd_food_cache, handle_cache_callback, handle_cache_number, is_cache_number
+from handlers.food_cache import cmd_food_cache, handle_cache_callback, handle_cache_number, handle_mtype_callback, is_cache_number
 from handlers.goal import cmd_goal
 from handlers.meal import handle_photo, handle_text
 from handlers.report import cmd_report
@@ -117,6 +117,11 @@ async def _handle_cache_callback(update: Update, context: ContextTypes.DEFAULT_T
 
 
 @auth_check
+async def _handle_mtype_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await handle_mtype_callback(update, context)
+
+
+@auth_check
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Calorie Bot 啟動完成，直接傳食物照片或文字即可記錄。")
 
@@ -143,6 +148,7 @@ def main():
     app.add_handler(CommandHandler("r", _cmd_report))
     app.add_handler(CommandHandler("f", _cmd_food_cache))
     app.add_handler(CallbackQueryHandler(_handle_cache_callback, pattern="^cache:"))
+    app.add_handler(CallbackQueryHandler(_handle_mtype_callback, pattern="^mtype:"))
     app.add_handler(MessageHandler(filters.PHOTO, _handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_text))
 
