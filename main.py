@@ -23,6 +23,7 @@ from handlers.manual_meal import (
 from handlers.food_cache import cmd_food_cache, handle_cache_callback, handle_cache_number, is_cache_number
 from handlers.goal import cmd_goal
 from handlers.meal import handle_photo, handle_text
+from handlers.report import cmd_report
 from handlers.tdee import cmd_tdee
 from handlers.query import cmd_today
 from handlers.weight import cmd_weight
@@ -101,6 +102,11 @@ async def _cmd_goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @auth_check
+async def _cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await cmd_report(update, context)
+
+
+@auth_check
 async def _cmd_food_cache(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await cmd_food_cache(update, context)
 
@@ -134,6 +140,7 @@ def main():
     app.add_handler(CommandHandler("s", _cmd_today))
     app.add_handler(CommandHandler("u", _cmd_undo))
     app.add_handler(CommandHandler("g", _cmd_goal))
+    app.add_handler(CommandHandler("r", _cmd_report))
     app.add_handler(CommandHandler("f", _cmd_food_cache))
     app.add_handler(CallbackQueryHandler(_handle_cache_callback, pattern="^cache:"))
     app.add_handler(MessageHandler(filters.PHOTO, _handle_photo))

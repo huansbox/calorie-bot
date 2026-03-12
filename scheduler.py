@@ -66,6 +66,17 @@ async def daily_summary(app: Application):
     logger.info("Daily summary sent")
 
 
+async def weekly_nutrition_report(app: Application):
+    """每週一推播上週營養週報。"""
+    from handlers.report import _get_last_week_range, generate_report
+
+    start, end = _get_last_week_range()
+    report = generate_report(start, end, "週報")
+
+    await app.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=report)
+    logger.info("Weekly nutrition report sent")
+
+
 async def weekly_api_report(app: Application):
     """每週日推播 API 用量與費用。"""
     usage = get_weekly_token_usage()
@@ -129,6 +140,16 @@ def setup_scheduler(app: Application) -> AsyncIOScheduler:
     )
 
     scheduler.add_job(
+        weekly_nutrition_report,
+        "cron",
+        day_of_week="mon",
+        hour=PUSH_HOUR,
+        minute=10,
+        args=[app],
+        id="weekly_nutrition_report",
+    )
+
+    scheduler.add_job(
         cleanup_expired_images,
         "cron",
         hour=3,
@@ -139,7 +160,8 @@ def setup_scheduler(app: Application) -> AsyncIOScheduler:
 
     scheduler.start()
     logger.info(
-        "Scheduler started: daily summary at %d:00, weekly report Sun %d:05, image cleanup at 03:00",
+        "Scheduler started: daily summary at %d:00, weekly report Sun %d:05, nutrition report Mon %d:10, image cleanup at 03:00",
+        PUSH_HOUR,
         PUSH_HOUR,
         PUSH_HOUR,
     )

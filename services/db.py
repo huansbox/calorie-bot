@@ -88,6 +88,24 @@ def get_meals_by_date(target_date: date, tz_offset: int = 8) -> list[dict]:
     return result.data
 
 
+def get_meals_by_week(start_date: date, end_date: date, tz_offset: int = 8) -> list[dict]:
+    """取得指定日期範圍的所有飲食記錄（含 start_date 到 end_date）。"""
+    from datetime import timedelta
+
+    utc_start = datetime(start_date.year, start_date.month, start_date.day, tzinfo=timezone.utc) - timedelta(hours=tz_offset)
+    utc_end = datetime(end_date.year, end_date.month, end_date.day, tzinfo=timezone.utc) - timedelta(hours=tz_offset) + timedelta(days=1)
+
+    result = (
+        supabase.table("meals")
+        .select("*")
+        .gte("recorded_at", utc_start.isoformat())
+        .lt("recorded_at", utc_end.isoformat())
+        .order("recorded_at")
+        .execute()
+    )
+    return result.data
+
+
 def get_weekly_token_usage(tz_offset: int = 8) -> dict:
     """取得過去 7 天的 token 用量總計。"""
     from datetime import timedelta
@@ -163,6 +181,24 @@ def get_previous_weight() -> dict | None:
     return result.data[1] if len(result.data) >= 2 else None
 
 
+def get_weight_range(start_date: date, end_date: date, tz_offset: int = 8) -> list[dict]:
+    """取得指定日期範圍內的體重記錄，依時間排序。"""
+    from datetime import timedelta
+
+    utc_start = datetime(start_date.year, start_date.month, start_date.day, tzinfo=timezone.utc) - timedelta(hours=tz_offset)
+    utc_end = datetime(end_date.year, end_date.month, end_date.day, tzinfo=timezone.utc) - timedelta(hours=tz_offset) + timedelta(days=1)
+
+    result = (
+        supabase.table("weight_logs")
+        .select("*")
+        .gte("recorded_at", utc_start.isoformat())
+        .lt("recorded_at", utc_end.isoformat())
+        .order("recorded_at")
+        .execute()
+    )
+    return result.data
+
+
 # ── Daily TDEE ─────────────────────────────────────────
 
 def upsert_tdee(tdee_kcal: int, target_date: date | None = None) -> dict:
@@ -208,6 +244,19 @@ def get_today_tdee(tz_offset: int = 8) -> dict | None:
         .execute()
     )
     return result.data[0] if result.data else None
+
+
+def get_tdee_by_week(start_date: date, end_date: date) -> list[dict]:
+    """取得指定日期範圍的所有 TDEE 記錄。"""
+    result = (
+        supabase.table("daily_tdee")
+        .select("*")
+        .gte("date", start_date.isoformat())
+        .lte("date", end_date.isoformat())
+        .order("date")
+        .execute()
+    )
+    return result.data
 
 
 # ── Cleanup ────────────────────────────────────────────
