@@ -6,6 +6,7 @@ from telegram.ext import ContextTypes
 
 from config import DAILY_CALORIE_GOAL
 from services.db import get_today_meals, get_today_tdee
+from services.nutrition import format_macros
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lines.append("")
     lines.append(f"攝取合計：{_fmt(total_cal)} kcal")
-    lines.append(f"蛋白質：{total_protein:.0f}g　碳水：{total_carbs:.0f}g　脂肪：{total_fat:.0f}g")
+    lines.extend(format_macros(total_protein, total_carbs, total_fat))
 
     # TDEE
     tdee_row = get_today_tdee()

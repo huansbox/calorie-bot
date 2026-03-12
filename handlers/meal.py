@@ -8,6 +8,7 @@ from telegram.ext import ContextTypes
 from config import DAILY_CALORIE_GOAL, MEDIA_DIR
 from services.ai import analyze_food
 from services.db import get_today_meals, insert_meal
+from services.nutrition import format_macros
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +109,7 @@ async def _process_food(
         "記錄完成",
         f"🍱 {result.description}",
         f"熱量：{_format_number(result.calories)} kcal",
-        f"蛋白質：{result.protein_g:.0f}g　碳水：{result.carbs_g:.0f}g　脂肪：{result.fat_g:.0f}g",
+        *format_macros(result.protein_g, result.carbs_g, result.fat_g),
         f"餐別：{meal_type}",
         "",
         f"今日累計：{_format_number(total_cal)} / {_format_number(DAILY_CALORIE_GOAL)} kcal",

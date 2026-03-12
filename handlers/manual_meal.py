@@ -34,9 +34,16 @@ def parse_bot_reply(text: str) -> dict:
     """
     desc_match = re.search(r"🍱\s*(.+)", text)
     cal_match = re.search(r"熱量：([\d,]+)\s*kcal", text)
-    macro_match = re.search(
+    # 新格式：🍗 蛋白質 15g (17%)
+    new_macro = re.search(
+        r"🍗\s*蛋白質\s*([\d.]+)g.*\n🍚\s*碳水\s*([\d.]+)g.*\n🧈\s*脂肪\s*([\d.]+)g",
+        text,
+    )
+    # 舊格式：蛋白質：15g　碳水：30g　脂肪：18g
+    old_macro = re.search(
         r"蛋白質：([\d.]+)g\s*碳水：([\d.]+)g\s*脂肪：([\d.]+)g", text
     )
+    macro_match = new_macro or old_macro
 
     if not desc_match or not cal_match:
         raise ValueError("無法解析 Bot 回覆格式")
@@ -114,6 +121,7 @@ async def handle_manual_meal(update: Update, context: ContextTypes.DEFAULT_TYPE,
     from config import DAILY_CALORIE_GOAL
     from handlers.meal import _infer_meal_type, _format_number
     from services.db import get_today_meals, insert_meal
+    from services.nutrition import format_macros
 
     meal_type = _infer_meal_type()
 
@@ -137,7 +145,7 @@ async def handle_manual_meal(update: Update, context: ContextTypes.DEFAULT_TYPE,
         "記錄完成（手動）",
         f"🍱 {data['description']}",
         f"熱量：{_format_number(data['calories'])} kcal",
-        f"蛋白質：{data['protein_g']:.0f}g　碳水：{data['carbs_g']:.0f}g　脂肪：{data['fat_g']:.0f}g",
+        *format_macros(data['protein_g'], data['carbs_g'], data['fat_g']),
         f"餐別：{meal_type}",
         "",
         f"今日累計：{_format_number(total_cal)} / {_format_number(DAILY_CALORIE_GOAL)} kcal",

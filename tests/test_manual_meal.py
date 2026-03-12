@@ -76,6 +76,23 @@ class TestParseBotReply:
         assert result["description"] == "御飯糰"
         assert result["calories"] == 280
 
+    def test_new_format_with_pct(self):
+        text = (
+            "記錄完成\n"
+            "🍱 起司蛋餅\n"
+            "熱量：350 kcal\n"
+            "🍗 蛋白質 15g (17%)\n"
+            "🍚 碳水 30g (34%)\n"
+            "🧈 脂肪 18g (49%)\n"
+            "餐別：早餐"
+        )
+        result = parse_bot_reply(text)
+        assert result["description"] == "起司蛋餅"
+        assert result["calories"] == 350
+        assert result["protein_g"] == 15.0
+        assert result["carbs_g"] == 30.0
+        assert result["fat_g"] == 18.0
+
     def test_missing_macro_defaults_zero(self):
         text = "🍱 咖啡\n熱量：50 kcal"
         result = parse_bot_reply(text)
