@@ -61,6 +61,7 @@ tests/
 - **Claude JSON 容錯**：parse_ai_response 處理 code fence、畸形 JSON (如 `>` 替代 `:`)
 - **圖片 24 小時過期**：暫存 data/media/，排程清理
 - **API 費用追蹤**：每筆 meal 記錄 input/output tokens，週日推播週報
+- **ai_confidence 觀察中**：Gemini 幾乎不回 low/medium（Prompt 指示未被嚴格遵守），目前保留欄位觀察，未來可能移除。區分 AI vs 手動用 input_tokens=0 即可
 - **手動記錄**：三種免 AI 輸入方式 — 貼上 Bot 回覆、@前綴快速輸入、/m 指令
 - **熱量計算**：AI 只回傳三大營養素重量，程式端用 4-4-9 公式算熱量，回覆含百分比
 - **每日目標**：/g 動態調整（記憶體內，重啟回 .env 預設值）
