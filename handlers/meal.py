@@ -6,7 +6,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from config import MEDIA_DIR, get_calorie_goal
-from handlers.food_cache import make_cache_button
 from services.ai import analyze_food
 from services.db import get_today_meals, insert_meal
 from services.nutrition import format_macros
@@ -122,6 +121,8 @@ async def _process_food(
 
     if result.note:
         lines.append(f"📝 {result.note}")
+
+    from handlers.food_cache import make_cache_button
 
     await processing_msg.edit_text(
         "\n".join(lines),
