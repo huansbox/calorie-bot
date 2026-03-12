@@ -217,5 +217,10 @@ async def handle_mtype_callback(update: Update, context: ContextTypes.DEFAULT_TY
     old_type = meal["meal_type"]
     new_text = old_text.replace(f"餐別：{old_type}", "餐別：其他")
 
+    # 只保留「加入快取」按鈕
+    cache_only = InlineKeyboardMarkup([
+        [InlineKeyboardButton("加入快取", callback_data=f"cache:{meal_id}")]
+    ])
+
     await query.answer(f"已改為「其他」（原：{old_type}）")
-    await query.edit_message_text(text=new_text, reply_markup=None)
+    await query.edit_message_text(text=new_text, reply_markup=cache_only)
