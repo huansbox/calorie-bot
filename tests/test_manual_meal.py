@@ -177,3 +177,35 @@ class TestParseAtInput:
     def test_empty_raises(self):
         with pytest.raises(ValueError):
             parse_at_input("@")
+
+    def test_multiplier_integer(self):
+        result = parse_at_input("@養樂多 100 1 20 2 x2")
+        assert result["description"] == "養樂多 x2"
+        assert result["calories"] == 200
+        assert result["protein_g"] == 2.0
+        assert result["carbs_g"] == 40.0
+        assert result["fat_g"] == 4.0
+
+    def test_multiplier_decimal(self):
+        result = parse_at_input("@便當 800 x0.5")
+        assert result["description"] == "便當 x0.5"
+        assert result["calories"] == 400
+        assert result["protein_g"] == 0.0
+
+    def test_multiplier_with_macros_decimal(self):
+        result = parse_at_input("@牛奶 150 8 12 6 x1.5")
+        assert result["description"] == "牛奶 x1.5"
+        assert result["calories"] == 225
+        assert result["protein_g"] == 12.0
+        assert result["carbs_g"] == 18.0
+        assert result["fat_g"] == 9.0
+
+    def test_multiplier_x1_no_suffix(self):
+        result = parse_at_input("@咖啡 50 x1")
+        assert result["description"] == "咖啡"
+        assert result["calories"] == 50
+
+    def test_multiplier_case_insensitive(self):
+        result = parse_at_input("@蛋 80 X3")
+        assert result["description"] == "蛋 x3"
+        assert result["calories"] == 240

@@ -1,10 +1,11 @@
 import logging
+import re
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from config import get_calorie_goal
-from handlers.manual_meal import parse_at_input
+from handlers.manual_meal import _apply_multiplier, parse_at_input
 from handlers.meal import _infer_meal_type, _format_number
 from services.db import (
     MAX_CACHE_ITEMS,
@@ -23,27 +24,33 @@ logger = logging.getLogger(__name__)
 
 
 def make_meal_buttons(meal_id: str) -> InlineKeyboardMarkup:
-    """建立記錄完成後的 Inline Buttons：加入快取 + 改為其他。"""
+    """建立記錄完成後的 Inline Buttons：加入快取 + 改為其他 + 修正。"""
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("加入快取", callback_data=f"cache:{meal_id}"),
             InlineKeyboardButton("改為其他", callback_data=f"mtype:{meal_id}"),
+            InlineKeyboardButton("修正", callback_data=f"correct:{meal_id}"),
         ]
     ])
 
 
+_CACHE_RE = re.compile(r'^(\d+)(?:\s*[xX](\d+(?:\.\d+)?))?\s*$')
+
+
 def is_cache_number(text: str) -> bool:
-    """判斷是否為快取編號（11-99 純數字）。"""
-    s = text.strip()
-    if not s.isdigit():
+    """判斷是否為快取編號（11-99，可帶乘數如 11 x2）。"""
+    match = _CACHE_RE.match(text.strip())
+    if not match:
         return False
-    n = int(s)
+    n = int(match.group(1))
     return 11 <= n <= 99
 
 
 async def handle_cache_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """處理數字 11-99 的快取記錄。"""
-    index = int(update.message.text.strip())
+    """處理數字 11-99 的快取記錄（可帶乘數）。"""
+    match = _CACHE_RE.match(update.message.text.strip())
+    index = int(match.group(1))
+    multiplier = float(match.group(2) or 1)
     item = get_cache_by_index(index)
 
     if not item:
@@ -52,13 +59,22 @@ async def handle_cache_number(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     meal_type = _infer_meal_type()
 
+    # 套用乘數
+    values = _apply_multiplier({
+        "description": item["description"],
+        "calories": item["calories"],
+        "protein_g": item["protein_g"],
+        "carbs_g": item["carbs_g"],
+        "fat_g": item["fat_g"],
+    }, multiplier)
+
     row = insert_meal(
         meal_type=meal_type,
-        description=item["description"],
-        calories=item["calories"],
-        protein_g=item["protein_g"],
-        carbs_g=item["carbs_g"],
-        fat_g=item["fat_g"],
+        description=values["description"],
+        calories=values["calories"],
+        protein_g=values["protein_g"],
+        carbs_g=values["carbs_g"],
+        fat_g=values["fat_g"],
         raw_input=update.message.text,
         ai_confidence="high",
         input_tokens=0,
@@ -70,15 +86,21 @@ async def handle_cache_number(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     lines = [
         "記錄完成（快取）",
-        f"🍱 {item['description']}",
-        f"熱量：{_format_number(item['calories'])} kcal",
-        *format_macros(item["protein_g"], item["carbs_g"], item["fat_g"]),
+        f"🍱 {values['description']}",
+        f"熱量：{_format_number(values['calories'])} kcal",
+        *format_macros(values["protein_g"], values["carbs_g"], values["fat_g"]),
         f"餐別：{meal_type}",
         "",
         f"今日累計：{_format_number(total_cal)} / {_format_number(get_calorie_goal())} kcal",
     ]
 
-    msg = await update.message.reply_text("\n".join(lines))
+    cache_buttons = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("改為其他", callback_data=f"mtype:{row['id']}"),
+            InlineKeyboardButton("修正", callback_data=f"correct:{row['id']}"),
+        ]
+    ])
+    msg = await update.message.reply_text("\n".join(lines), reply_markup=cache_buttons)
     context.user_data["last_meal_id"] = row["id"]
     context.user_data["last_meal_message_id"] = msg.message_id
 
@@ -167,7 +189,10 @@ async def handle_cache_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     if cache_exists(meal["description"]):
         mtype_only = InlineKeyboardMarkup([
-            [InlineKeyboardButton("改為其他", callback_data=f"mtype:{meal_id}")]
+            [
+                InlineKeyboardButton("改為其他", callback_data=f"mtype:{meal_id}"),
+                InlineKeyboardButton("修正", callback_data=f"correct:{meal_id}"),
+            ]
         ])
         await query.answer("已在快取中")
         await query.edit_message_reply_markup(reply_markup=mtype_only)
@@ -187,9 +212,11 @@ async def handle_cache_callback(update: Update, context: ContextTypes.DEFAULT_TY
         fat_g=meal["fat_g"],
     )
 
-    # 只保留「改為其他」按鈕
     mtype_only = InlineKeyboardMarkup([
-        [InlineKeyboardButton("改為其他", callback_data=f"mtype:{meal_id}")]
+        [
+            InlineKeyboardButton("改為其他", callback_data=f"mtype:{meal_id}"),
+            InlineKeyboardButton("修正", callback_data=f"correct:{meal_id}"),
+        ]
     ])
 
     await query.answer(f"已加入快取：{meal['description']}")
@@ -227,7 +254,10 @@ async def handle_mtype_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     # 只保留「加入快取」按鈕
     cache_only = InlineKeyboardMarkup([
-        [InlineKeyboardButton("加入快取", callback_data=f"cache:{meal_id}")]
+        [
+            InlineKeyboardButton("加入快取", callback_data=f"cache:{meal_id}"),
+            InlineKeyboardButton("修正", callback_data=f"correct:{meal_id}"),
+        ]
     ])
 
     await query.answer(f"已改為「其他」（原：{old_type}）")

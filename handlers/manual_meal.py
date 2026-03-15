@@ -68,8 +68,16 @@ def parse_at_input(text: str) -> dict:
     支援：
         @品名 熱量
         @品名 熱量 蛋白質 碳水 脂肪
+        末尾可加 x倍數（如 x2, x0.5）
     """
     content = text.strip()[1:].strip()  # 去掉 @
+
+    # 偵測末尾乘數：x2, x0.5 等
+    multiplier = 1.0
+    mult_match = re.search(r'\s+[xX](\d+(?:\.\d+)?)\s*$', content)
+    if mult_match:
+        multiplier = float(mult_match.group(1))
+        content = content[:mult_match.start()]
 
     # 從後面找數字，品名是前面的部分
     # 支援：@起司蛋餅 350 15 30 18 或 @御飯糰 280
@@ -84,13 +92,13 @@ def parse_at_input(text: str) -> dict:
             carbs_g = float(nums[2])
             fat_g = float(nums[3])
             description = " ".join(name_parts) if name_parts else nums[0]
-            return {
+            return _apply_multiplier({
                 "description": description,
                 "calories": calories,
                 "protein_g": protein_g,
                 "carbs_g": carbs_g,
                 "fat_g": fat_g,
-            }
+            }, multiplier)
         except ValueError:
             pass
 
@@ -99,13 +107,13 @@ def parse_at_input(text: str) -> dict:
         name_parts, num = parts[:-1], parts[-1]
         try:
             calories = int(round(float(num)))
-            return {
+            return _apply_multiplier({
                 "description": " ".join(name_parts),
                 "calories": calories,
                 "protein_g": 0.0,
                 "carbs_g": 0.0,
                 "fat_g": 0.0,
-            }
+            }, multiplier)
         except ValueError:
             pass
 
@@ -114,6 +122,18 @@ def parse_at_input(text: str) -> dict:
         "@品名 熱量\n"
         "@品名 熱量 蛋白質 碳水 脂肪"
     )
+
+
+def _apply_multiplier(data: dict, multiplier: float) -> dict:
+    """套用乘數到營養素數值。"""
+    if multiplier == 1.0:
+        return data
+    data["calories"] = int(round(data["calories"] * multiplier))
+    data["protein_g"] = round(data["protein_g"] * multiplier, 1)
+    data["carbs_g"] = round(data["carbs_g"] * multiplier, 1)
+    data["fat_g"] = round(data["fat_g"] * multiplier, 1)
+    data["description"] += f" x{multiplier:g}"
+    return data
 
 
 async def handle_manual_meal(update: Update, context: ContextTypes.DEFAULT_TYPE, data: dict):

@@ -60,12 +60,13 @@ tests/
 - **Gemini JSON mode**：response_mime_type + response_json_schema 強制合法 JSON 輸出
 - **Claude JSON 容錯**：parse_ai_response 處理 code fence、畸形 JSON (如 `>` 替代 `:`)
 - **圖片 24 小時過期**：暫存 data/media/，排程清理
-- **API 費用追蹤**：每筆 meal 記錄 input/output tokens，週日推播週報
+- **API 費用追蹤**：每筆 meal 記錄 input/output tokens，週一推播週報
 - **ai_confidence 觀察中**：Gemini 幾乎不回 low/medium（Prompt 指示未被嚴格遵守），目前保留欄位觀察，未來可能移除。區分 AI vs 手動用 input_tokens=0 即可
-- **手動記錄**：三種免 AI 輸入方式 — 貼上 Bot 回覆、@前綴快速輸入、/m 指令
+- **手動記錄**：三種免 AI 輸入方式 — 貼上 Bot 回覆、@前綴快速輸入、/m 指令，末尾可加 x 倍數（如 x2, x0.5）
+- **手動修正**：AI 分析回覆附「修正」按鈕，點擊後輸入正確值直接更新該筆記錄
 - **熱量計算**：AI 只回傳三大營養素重量，程式端用 4-4-9 公式算熱量，回覆含百分比
 - **每日目標**：/g 動態調整（記憶體內，重啟回 .env 預設值）
-- **食物快取**：常吃食物存 food_cache 表，記錄完成後 Inline Button 一鍵加入，/f 列出清單，輸入編號 11-99 直接記錄
+- **食物快取**：常吃食物存 food_cache 表，記錄完成後 Inline Button 一鍵加入，/f 列出清單，輸入編號 11-99 直接記錄（可加 x 倍數如 `11 x2`）
 - **數字路由**：1-4 餐別覆蓋、11-99 快取記錄，不衝突
 - **週報**：/r 上週、/r now 本週至今，六區塊（每日收支、營養素結構、正餐比例、累積收支、體重預估vs實際、週對週），未記錄 TDEE 的天數用 BMR 補位（標 *）
 
