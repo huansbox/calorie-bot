@@ -13,7 +13,7 @@
   - Gemini 2.5 Pro (預設，JSON mode 強制合法輸出)
   - Claude Sonnet 4.6 (備選，parse_ai_response 容錯解析)
 - **資料庫**: Supabase (PostgreSQL) — meals, weight_logs, daily_tdee, food_cache 四張表
-- **排程**: APScheduler (AsyncIOScheduler)
+- **排程**: APScheduler (AsyncIOScheduler) — 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理
 - **部署**: RackNerd VPS (Ubuntu 24.04, systemd 管理)
 
 ## 檔案結構
@@ -21,7 +21,7 @@
 ```
 main.py              # 進入點，註冊 handlers + 排程，auth_check decorator
 config.py            # 環境變數讀取 (dotenv)，含 BMR 設定
-scheduler.py         # 每日 08:00 昨日摘要 + 週一 08:10 營養週報 + 週日 08:05 API 週報 + 03:00 照片清理
+scheduler.py         # 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理
 handlers/
   meal.py            # 食物記錄核心 (文字/照片 → AI 分析 → DB → 回覆)，含 token 追蹤
   weight.py          # /w 體重記錄

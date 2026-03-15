@@ -132,7 +132,7 @@ def setup_scheduler(app: Application) -> AsyncIOScheduler:
     scheduler.add_job(
         weekly_api_report,
         "cron",
-        day_of_week="sun",
+        day_of_week="mon",
         hour=PUSH_HOUR,
         minute=5,
         args=[app],
@@ -160,7 +160,7 @@ def setup_scheduler(app: Application) -> AsyncIOScheduler:
 
     scheduler.start()
     logger.info(
-        "Scheduler started: daily summary at %d:00, weekly report Sun %d:05, nutrition report Mon %d:10, image cleanup at 03:00",
+        "Scheduler started: daily summary at %d:00, API report Mon %d:05, nutrition report Mon %d:10, image cleanup at 03:00",
         PUSH_HOUR,
         PUSH_HOUR,
         PUSH_HOUR,

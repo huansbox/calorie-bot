@@ -50,12 +50,11 @@ def insert_meal(
 
 def get_today_meals(tz_offset: int = 8) -> list[dict]:
     """取得今日所有飲食記錄（依台灣時間）。"""
-    now = datetime.now(timezone.utc)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    # 調整為台灣時間的 00:00 (UTC+8 → UTC-8h)
     from datetime import timedelta
 
-    utc_start = today_start - timedelta(hours=tz_offset)
+    now_tw = datetime.now(timezone.utc) + timedelta(hours=tz_offset)
+    today = now_tw.date()
+    utc_start = datetime(today.year, today.month, today.day, tzinfo=timezone.utc) - timedelta(hours=tz_offset)
     utc_end = utc_start + timedelta(days=1)
 
     result = (
