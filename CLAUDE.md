@@ -27,7 +27,7 @@ handlers/
   weight.py          # /w 體重記錄
   tdee.py            # /t 每日消耗記錄（預設昨天，加 n 記今天，自動加 BMR）
   query.py           # /s 今日摘要
-  correction.py      # 餐別覆蓋 (1-4) + /u 撤銷
+  correction.py      # 餐別覆蓋 (1-4) + /u 撤銷 + 「修正」按鈕手動修正營養素
   manual_meal.py     # 手動記錄 (Bot 回覆貼上 / @前綴 / /m 指令)，免 AI 分析
   goal.py            # /g 動態調整每日熱量目標
   food_cache.py      # 食物快取：Inline Button 加入、/f 管理、數字 11-99 快速記錄
