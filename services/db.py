@@ -117,6 +117,7 @@ def get_weekly_token_usage(tz_offset: int = 8) -> dict:
         supabase.table("meals")
         .select("input_tokens, output_tokens")
         .gte("recorded_at", utc_start.isoformat())
+        .gt("input_tokens", 0)
         .execute()
     )
     total_input = sum(r.get("input_tokens", 0) or 0 for r in result.data)

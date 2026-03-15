@@ -27,22 +27,35 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"📋 今日記錄（{date_str}）\n\n尚無記錄")
         return
 
-    lines = [f"📋 今日記錄（{date_str}）", ""]
+    lines = [f"📋 今日記錄（{date_str}）"]
 
     total_cal = 0
     total_protein = 0.0
     total_carbs = 0.0
     total_fat = 0.0
 
+    # 依餐別分組
+    meal_order = ["早餐", "午餐", "晚餐", "其他"]
+    grouped: dict[str, list] = {t: [] for t in meal_order}
     for m in meals:
         meal_type = m["meal_type"] or "其他"
-        desc = m["description"] or ""
-        cal = m["calories"] or 0
-        lines.append(f"{meal_type}　{desc}　{_fmt(cal)} kcal")
-        total_cal += cal
+        if meal_type not in grouped:
+            grouped[meal_type] = []
+        grouped[meal_type].append(m)
+        total_cal += m["calories"] or 0
         total_protein += float(m["protein_g"] or 0)
         total_carbs += float(m["carbs_g"] or 0)
         total_fat += float(m["fat_g"] or 0)
+
+    for mt in meal_order:
+        items = grouped[mt]
+        if not items:
+            continue
+        sub_cal = sum(m["calories"] or 0 for m in items)
+        lines.append("")
+        lines.append(f"【{mt}】{_fmt(sub_cal)} kcal")
+        for m in items:
+            lines.append(f"  {m['description'] or ''}　{_fmt(m['calories'] or 0)} kcal")
 
     lines.append("")
     lines.append(f"攝取合計：{_fmt(total_cal)} kcal")

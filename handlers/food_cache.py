@@ -123,7 +123,11 @@ async def cmd_food_cache(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         lines = ["📋 食物快取", ""]
         for i, item in enumerate(items):
-            lines.append(f"{i + 11}. {item['description']} {_format_number(item['calories'])}kcal")
+            p = round(item["protein_g"] or 0)
+            c = round(item["carbs_g"] or 0)
+            f = round(item["fat_g"] or 0)
+            macro = f" P{p}/C{c}/F{f}" if (p or c or f) else ""
+            lines.append(f"{i + 11}. {item['description']} {_format_number(item['calories'])}kcal{macro}")
         await update.message.reply_text("\n".join(lines))
         return
 
