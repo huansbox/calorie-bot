@@ -72,6 +72,7 @@ class FoodAnalysis:
     note: str
     input_tokens: int = 0
     output_tokens: int = 0
+    thinking_tokens: int = 0
 
 
 def parse_ai_response(raw: str) -> FoodAnalysis:
@@ -175,9 +176,11 @@ async def _analyze_gemini(
 
     input_tokens = 0
     output_tokens = 0
+    thinking_tokens = 0
     if response.usage_metadata:
         input_tokens = response.usage_metadata.prompt_token_count or 0
         output_tokens = response.usage_metadata.candidates_token_count or 0
+        thinking_tokens = response.usage_metadata.thoughts_token_count or 0
 
     protein_g = float(data["protein_g"])
     carbs_g = float(data["carbs_g"])
@@ -193,6 +196,7 @@ async def _analyze_gemini(
         note=data.get("note", ""),
         input_tokens=input_tokens,
         output_tokens=output_tokens,
+        thinking_tokens=thinking_tokens,
     )
 
 
