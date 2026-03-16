@@ -98,6 +98,7 @@ async def _process_food(
         image_expires_at=image_expires,
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
+        thinking_tokens=result.thinking_tokens,
     )
 
     # 計算今日累計
