@@ -26,6 +26,7 @@ def insert_meal(
     image_expires_at: str | None = None,
     input_tokens: int = 0,
     output_tokens: int = 0,
+    thinking_tokens: int = 0,
 ) -> dict:
     """新增一筆飲食記錄，回傳插入的 row。"""
     row = {
@@ -42,6 +43,7 @@ def insert_meal(
         "image_expires_at": image_expires_at,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
+        "thinking_tokens": thinking_tokens,
     }
     result = supabase.table("meals").insert(row).execute()
     logger.info("Inserted meal: %s", result.data[0]["id"])
@@ -115,14 +117,20 @@ def get_weekly_token_usage(tz_offset: int = 8) -> dict:
 
     result = (
         supabase.table("meals")
-        .select("input_tokens, output_tokens")
+        .select("input_tokens, output_tokens, thinking_tokens")
         .gte("recorded_at", utc_start.isoformat())
         .gt("input_tokens", 0)
         .execute()
     )
     total_input = sum(r.get("input_tokens", 0) or 0 for r in result.data)
     total_output = sum(r.get("output_tokens", 0) or 0 for r in result.data)
-    return {"input_tokens": total_input, "output_tokens": total_output, "count": len(result.data)}
+    total_thinking = sum(r.get("thinking_tokens", 0) or 0 for r in result.data)
+    return {
+        "input_tokens": total_input,
+        "output_tokens": total_output,
+        "thinking_tokens": total_thinking,
+        "count": len(result.data),
+    }
 
 
 def get_last_meal() -> dict | None:
