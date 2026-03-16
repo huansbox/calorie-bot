@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram.ext import Application
 
-from config import PUSH_HOUR, TELEGRAM_CHAT_ID, get_calorie_goal
+from config import AI_PROVIDER, PUSH_HOUR, TELEGRAM_CHAT_ID, get_calorie_goal
 from services.nutrition import format_macros
 from services.db import (
     clear_image_path,
@@ -77,15 +77,40 @@ async def weekly_nutrition_report(app: Application):
     logger.info("Weekly nutrition report sent")
 
 
+# 費率 (USD per 1M tokens)
+_PRICING = {
+    "gemini": {"input": 1.25, "output": 10.0, "thinking": 10.0},
+    "claude": {"input": 3.0, "output": 15.0, "thinking": 0},
+}
+
+
+def _calc_api_cost(
+    input_tokens: int,
+    output_tokens: int,
+    thinking_tokens: int,
+    provider: str,
+) -> float:
+    """依 provider 計算 API 費用 (USD)。"""
+    rates = _PRICING.get(provider, _PRICING["gemini"])
+    return (
+        input_tokens * rates["input"] / 1_000_000
+        + output_tokens * rates["output"] / 1_000_000
+        + thinking_tokens * rates["thinking"] / 1_000_000
+    )
+
+
 async def weekly_api_report(app: Application):
-    """每週日推播 API 用量與費用。"""
+    """每週一推播 API 用量與費用。"""
     usage = get_weekly_token_usage()
     if usage["count"] == 0:
         return
 
-    input_cost = usage["input_tokens"] * 3 / 1_000_000
-    output_cost = usage["output_tokens"] * 15 / 1_000_000
-    total_cost = input_cost + output_cost
+    total_cost = _calc_api_cost(
+        input_tokens=usage["input_tokens"],
+        output_tokens=usage["output_tokens"],
+        thinking_tokens=usage["thinking_tokens"],
+        provider=AI_PROVIDER,
+    )
 
     lines = [
         "📈 本週 API 用量",
@@ -93,8 +118,10 @@ async def weekly_api_report(app: Application):
         f"分析次數：{usage['count']} 次",
         f"Input tokens：{_fmt(usage['input_tokens'])}",
         f"Output tokens：{_fmt(usage['output_tokens'])}",
-        f"預估費用：${total_cost:.4f} USD",
     ]
+    if usage["thinking_tokens"] > 0:
+        lines.append(f"Thinking tokens：{_fmt(usage['thinking_tokens'])}")
+    lines.append(f"預估費用：${total_cost:.4f} USD")
 
     await app.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text="\n".join(lines))
     logger.info("Weekly API report sent")
