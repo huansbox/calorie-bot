@@ -67,7 +67,7 @@ cp .env.example .env
 | `TELEGRAM_TOKEN` | BotFather 取得 | 是 |
 | `TELEGRAM_CHAT_ID` | 你的 Telegram chat ID | 是 |
 | `SUPABASE_URL` | Supabase Project URL | 是 |
-| `SUPABASE_KEY` | Supabase Publishable Key | 是 |
+| `SUPABASE_KEY` | Supabase Secret Key（Settings → API Keys） | 是 |
 | `AI_PROVIDER` | `gemini` 或 `claude` (預設 gemini) | 否 |
 | `GEMINI_API_KEY` | Google AI Studio 取得 | AI_PROVIDER=gemini 時必填 |
 | `ANTHROPIC_API_KEY` | Anthropic Console 取得 | AI_PROVIDER=claude 時必填 |
