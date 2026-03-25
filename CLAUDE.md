@@ -14,7 +14,8 @@
   - Claude Sonnet 4.6 (備選，parse_ai_response 容錯解析)
 - **資料庫**: Supabase (PostgreSQL) — meals, weight_logs, daily_tdee, food_cache 四張表，全部啟用 RLS，使用 Secret Key 繞過
 - **排程**: APScheduler (AsyncIOScheduler) — 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理
-- **部署**: RackNerd VPS (Ubuntu 24.04, systemd 管理)
+- **密鑰管理**: 1Password — 本機 `op run` + VPS Service Account，`.env` 只存 `op://` 參照
+- **部署**: RackNerd VPS (Ubuntu 24.04, systemd + `op run`)
 
 ## 檔案結構
 
@@ -48,6 +49,7 @@ tests/
 - Commit 遵循 Conventional Commits
 - 單元測試涵蓋 services/ai.py (JSON 解析) 與 handlers/manual_meal.py (輸入解析)
 - Windows 開發環境需設 PYTHONIOENCODING=utf-8
+- 本機啟動: `op run --env-file .env -- python main.py`（需 1Password 桌面 App 解鎖）
 
 ## 關鍵設計決策
 
@@ -93,5 +95,6 @@ ssh root@107.175.30.172 "cd /home/botuser/calorie-bot && sudo -u botuser git pul
 - SSH: root@107.175.30.172（本機已設定 SSH key）
 - Bot 執行帳號: botuser
 - 專案路徑: /home/botuser/calorie-bot
-- 服務名稱: calorie-bot.service
+- 服務名稱: calorie-bot.service（`op run` 透過 EnvironmentFile 載入 Service Account token）
+- Service Account token: `/etc/calorie-bot/op-token.env`（權限 600，root only）
 - GitHub remote: https://github.com/huansbox/calorie-bot.git (public)
