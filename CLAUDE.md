@@ -33,6 +33,7 @@ handlers/
   goal.py            # /g 動態調整每日熱量目標
   food_cache.py      # 食物快取：Inline Button 加入、/f 管理、數字 11-99 快速記錄
   report.py          # /r 週報 + /r now 本週至今，週一自動推播
+  backfill.py        # /b 補記過去日期的食物（預設昨天，支援 MMDD 日期 + 1-4 餐別）
 services/
   ai.py              # AI 雙引擎 (Gemini/Claude)，SYSTEM_PROMPT，parse_ai_response (有單元測試)
   db.py              # Supabase CRUD (meals, weight_logs, daily_tdee, food_cache)
@@ -40,6 +41,7 @@ services/
 tests/
   test_ai.py         # parse_ai_response 單元測試 (9 cases)
   test_manual_meal.py # 手動記錄解析函式測試
+  test_backfill.py   # 補記解析 + UTC 換算測試 (24 cases)
   test_nutrition.py  # 營養素計算與格式化測試
 ```
 
@@ -71,13 +73,11 @@ tests/
 - **食物快取**：常吃食物存 food_cache 表，記錄完成後 Inline Button 一鍵加入，/f 列出清單，輸入編號 11-99 直接記錄（可加 x 倍數如 `11 x2`）
 - **數字路由**：1-4 餐別覆蓋、11-99 快取記錄，不衝突
 - **週報**：/r 上週、/r now 本週至今，六區塊（每日收支、營養素結構、正餐比例、累積收支、體重預估vs實際、週對週），未記錄 TDEE 的天數用 BMR 補位（標 *）
+- **補記 /b**：預設昨天（比照 /t），MMDD 4位數指定日期（今天或未來自動退回上一年），可選 1-4 餐別（預設其他）。recorded_at 設為台灣正午 12:00 轉 UTC，確保落在 get_meals_by_date 查詢區間內。照片 caption 支援純餐別/日期（allow_empty_food）。已知限制：修正補記餐點後累計顯示今天而非補記日
 
 ## 未來想做
 
 - 月報統計
-- 條碼掃描（拍條碼照片 → pyzbar 解碼 → 查食品資料庫）
-- 運動單次消耗記錄
-- 語音輸入
 - Web Dashboard
 - 食物資料庫：衛福部 TFDA API、自訂食物別名
 
