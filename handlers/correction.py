@@ -104,18 +104,31 @@ async def handle_correction_input(update: Update, context: ContextTypes.DEFAULT_
 
 
 async def cmd_undo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """處理 /undo 指令，刪除最後一筆並等待重新輸入。"""
+    """處理 /undo 指令，優先刪除使用者最後互動的記錄，fallback 到時間最新。"""
+    context.user_data.pop("pending_correction", None)
+
+    # 優先用 last_meal_id（最後互動的記錄）
+    meal_id = context.user_data.get("last_meal_id")
+    if meal_id:
+        meal = get_meal_by_id(meal_id)
+        if meal:
+            delete_meal(meal_id)
+            context.user_data.pop("last_meal_id", None)
+            desc = meal["description"] or "未知"
+            await update.message.reply_text(
+                f"已刪除：{desc}\n請重新傳送正確的食物資訊（文字或照片），將作為新記錄。"
+            )
+            return
+
+    # Fallback：context 遺失或記錄已刪，用時間最新的
     last = get_last_meal()
     if not last:
         await update.message.reply_text("沒有可撤銷的記錄")
         return
 
-    desc = last["description"] or "未知"
-    meal_id = last["id"]
-
-    delete_meal(meal_id)
+    delete_meal(last["id"])
     context.user_data.pop("last_meal_id", None)
-
+    desc = last["description"] or "未知"
     await update.message.reply_text(
         f"已刪除：{desc}\n請重新傳送正確的食物資訊（文字或照片），將作為新記錄。"
     )
