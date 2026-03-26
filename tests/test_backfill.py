@@ -128,3 +128,37 @@ class TestParseBackfillArgs:
 
         _, _, food_text = parse_backfill_args("2 起司 雞排 便當 0315")
         assert food_text == "起司 雞排 便當"
+
+
+class TestDateToRecordedAt:
+    """date_to_recorded_at(target_date) -> UTC ISO string"""
+
+    def test_basic_conversion(self):
+        from handlers.backfill import date_to_recorded_at
+
+        result = date_to_recorded_at(date(2026, 3, 25))
+        assert result == "2026-03-25T04:00:00+00:00"
+
+    def test_jan_first(self):
+        from handlers.backfill import date_to_recorded_at
+
+        result = date_to_recorded_at(date(2026, 1, 1))
+        assert result == "2026-01-01T04:00:00+00:00"
+
+    def test_dec_31_previous_year(self):
+        from handlers.backfill import date_to_recorded_at
+
+        result = date_to_recorded_at(date(2025, 12, 31))
+        assert result == "2025-12-31T04:00:00+00:00"
+
+    def test_falls_within_query_range(self):
+        """換算結果必須落在 get_meals_by_date 的查詢區間內。"""
+        from handlers.backfill import date_to_recorded_at
+
+        target = date(2026, 3, 25)
+        recorded_at = date_to_recorded_at(target)
+        # get_meals_by_date 查詢區間：UTC 前一天 16:00 ~ 當天 16:00
+        utc_start = datetime(2026, 3, 24, 16, 0, 0, tzinfo=timezone.utc)
+        utc_end = datetime(2026, 3, 25, 16, 0, 0, tzinfo=timezone.utc)
+        recorded = datetime.fromisoformat(recorded_at)
+        assert utc_start <= recorded < utc_end

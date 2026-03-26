@@ -52,3 +52,12 @@ def parse_backfill_args(text: str) -> tuple[str, date, str]:
         raise ValueError("請輸入食物描述")
 
     return meal_type, target_date, food_text
+
+
+def date_to_recorded_at(target_date: date) -> str:
+    """將目標日期轉為 UTC ISO 字串（台灣正午 12:00 → UTC 04:00）。"""
+    tw_noon = datetime(
+        target_date.year, target_date.month, target_date.day,
+        12, 0, 0, tzinfo=TW_TZ,
+    )
+    return tw_noon.astimezone(timezone.utc).isoformat()
