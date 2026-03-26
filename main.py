@@ -27,6 +27,7 @@ from handlers.manual_meal import (
     is_bot_reply_format,
 )
 from handlers.food_cache import cmd_food_cache, handle_cache_callback, handle_cache_number, handle_mtype_callback, is_cache_number
+from handlers.backfill import cmd_backfill, handle_backfill_photo
 from handlers.goal import cmd_goal
 from handlers.meal import handle_photo, handle_text
 from handlers.report import cmd_report
@@ -145,6 +146,17 @@ async def _handle_correct_callback(update: Update, context: ContextTypes.DEFAULT
 
 
 @auth_check
+async def _cmd_backfill(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await cmd_backfill(update, context)
+
+
+@auth_check
+async def _handle_backfill_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.pop("pending_correction", None)
+    await handle_backfill_photo(update, context)
+
+
+@auth_check
 async def _cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = [
         "操作說明",
@@ -161,6 +173,7 @@ async def _cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/s — 今日摘要",
         "/w 體重 — 記錄體重",
         "/t 消耗 [n] — TDEE（預設昨天，加 n 今天）",
+        "/b [1-4] 食物 [MMDD] — 補記（預設昨天）",
         "/f — 食物快取清單",
         "/r — 上週週報 | /r now 本週至今",
         "/g 熱量 — 調整每日目標",
@@ -201,11 +214,19 @@ def main():
     app.add_handler(CommandHandler("g", _cmd_goal))
     app.add_handler(CommandHandler("r", _cmd_report))
     app.add_handler(CommandHandler("f", _cmd_food_cache))
+    app.add_handler(CommandHandler("b", _cmd_backfill))
     app.add_handler(CommandHandler("h", _cmd_help))
     app.add_handler(CallbackQueryHandler(_handle_cache_callback, pattern="^cache:"))
     app.add_handler(CallbackQueryHandler(_handle_mtype_callback, pattern="^mtype:"))
     app.add_handler(CallbackQueryHandler(_handle_correct_callback, pattern="^correct:"))
-    app.add_handler(MessageHandler(filters.PHOTO, _handle_photo))
+    app.add_handler(MessageHandler(
+        filters.PHOTO & filters.CaptionRegex(r"^/b\b"),
+        _handle_backfill_photo,
+    ))
+    app.add_handler(MessageHandler(
+        filters.PHOTO & ~filters.CaptionRegex(r"^/b\b"),
+        _handle_photo,
+    ))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _handle_text))
 
     logger.info("Bot started. Listening for chat_id=%s", TELEGRAM_CHAT_ID)
