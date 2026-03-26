@@ -27,6 +27,7 @@ def insert_meal(
     input_tokens: int = 0,
     output_tokens: int = 0,
     thinking_tokens: int = 0,
+    recorded_at: str | None = None,
 ) -> dict:
     """新增一筆飲食記錄，回傳插入的 row。"""
     row = {
@@ -45,6 +46,8 @@ def insert_meal(
         "output_tokens": output_tokens,
         "thinking_tokens": thinking_tokens,
     }
+    if recorded_at is not None:
+        row["recorded_at"] = recorded_at
     result = supabase.table("meals").insert(row).execute()
     logger.info("Inserted meal: %s", result.data[0]["id"])
     return result.data[0]
