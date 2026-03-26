@@ -123,11 +123,52 @@ class TestParseBackfillArgs:
         assert target_date.day == 25
         assert food_text == "滷肉飯"
 
+    def test_invalid_date_0229_non_leap_year(self):
+        """0229 在非閏年應回傳錯誤（2026 和 2025 都不是閏年）。"""
+        from handlers.backfill import parse_backfill_args
+
+        with pytest.raises(ValueError):
+            parse_backfill_args("雞排便當 0229")
+
     def test_multi_word_food(self):
         from handlers.backfill import parse_backfill_args
 
         _, _, food_text = parse_backfill_args("2 起司 雞排 便當 0315")
         assert food_text == "起司 雞排 便當"
+
+    def test_allow_empty_food_for_photo(self):
+        """照片場景允許 food_text 為空。"""
+        from handlers.backfill import parse_backfill_args
+
+        meal_type, target_date, food_text = parse_backfill_args(
+            "2 0325", allow_empty_food=True,
+        )
+        assert meal_type == "午餐"
+        assert target_date.month == 3
+        assert target_date.day == 25
+        assert food_text == ""
+
+    def test_allow_empty_food_only_meal_type(self):
+        """照片場景只給餐別。"""
+        from handlers.backfill import parse_backfill_args
+
+        meal_type, _, food_text = parse_backfill_args(
+            "2", allow_empty_food=True,
+        )
+        assert meal_type == "午餐"
+        assert food_text == ""
+
+    def test_allow_empty_food_only_date(self):
+        """照片場景只給日期。"""
+        from handlers.backfill import parse_backfill_args
+
+        meal_type, target_date, food_text = parse_backfill_args(
+            "0325", allow_empty_food=True,
+        )
+        assert meal_type == "其他"
+        assert target_date.month == 3
+        assert target_date.day == 25
+        assert food_text == ""
 
 
 class TestDateToRecordedAt:

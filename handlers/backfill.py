@@ -30,14 +30,18 @@ def _format_date(d: date) -> str:
     return f"{d.month}/{d.day}"
 
 
-def parse_backfill_args(text: str) -> tuple[str, date, str]:
+def parse_backfill_args(text: str, *, allow_empty_food: bool = False) -> tuple[str, date, str]:
     """解析補記指令參數。
+
+    Args:
+        text: /b 後面的文字。
+        allow_empty_food: 若為 True（照片場景），允許 food_text 為空。
 
     Returns:
         (meal_type, target_date, food_text)
 
     Raises:
-        ValueError: 輸入無法解析或缺少食物描述。
+        ValueError: 輸入無法解析或缺少食物描述（當 allow_empty_food=False）。
     """
     text = text.strip()
     if not text:
@@ -58,16 +62,19 @@ def parse_backfill_args(text: str) -> tuple[str, date, str]:
         mmdd = tokens.pop()
         try:
             parsed = datetime.strptime(f"2000{mmdd}", "%Y%m%d")
+            candidate = date(now_tw.year, parsed.month, parsed.day)
         except ValueError:
             raise ValueError(f"日期格式錯誤：{mmdd}")
-        candidate = date(now_tw.year, parsed.month, parsed.day)
         if candidate >= now_tw.date():
-            candidate = date(now_tw.year - 1, parsed.month, parsed.day)
+            try:
+                candidate = date(now_tw.year - 1, parsed.month, parsed.day)
+            except ValueError:
+                raise ValueError(f"日期格式錯誤：{mmdd}")
         target_date = candidate
 
     # 3) 食物描述
     food_text = " ".join(tokens)
-    if not food_text:
+    if not food_text and not allow_empty_food:
         raise ValueError("請輸入食物描述")
 
     return meal_type, target_date, food_text
@@ -107,7 +114,9 @@ async def handle_backfill_photo(update: "Update", context: "ContextTypes.DEFAULT
 
     if after_cmd:
         try:
-            meal_type, target_date, food_text = parse_backfill_args(after_cmd)
+            meal_type, target_date, food_text = parse_backfill_args(
+                after_cmd, allow_empty_food=True,
+            )
         except ValueError as e:
             await update.message.reply_text(
                 f"{e}\n\n照片補記用法：caption 輸入 /b [1-4] [MMDD]"
