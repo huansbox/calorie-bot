@@ -87,6 +87,16 @@ ALTER TABLE meals ADD COLUMN output_tokens INTEGER DEFAULT 0;
 
 ### 4. 本機啟動
 
+密鑰透過 1Password CLI 注入（`.env` 存的是 `op://` 參照，非明文）：
+
+```bash
+op run --env-file .env -- python main.py
+```
+
+需先安裝 [1Password CLI](https://developer.1password.com/docs/cli/get-started/) 並登入桌面 App。
+
+如不使用 1Password，可將 `.env` 中的 `op://` 參照替換為實際值後直接啟動：
+
 ```bash
 .venv/Scripts/python.exe main.py   # Windows
 .venv/bin/python main.py           # Linux
@@ -107,10 +117,11 @@ uv run pytest tests/ -v
 su - botuser
 cd ~/calorie-bot
 git clone https://github.com/huansbox/calorie-bot.git .
-cp /path/to/.env .env   # 手動放入環境變數檔
 mkdir -p data/media
 uv sync
 ```
+
+密鑰由 systemd 透過 1Password Service Account 注入，不需手動放 `.env`。
 
 ### systemd 服務
 
@@ -123,7 +134,8 @@ After=network.target
 [Service]
 User=botuser
 WorkingDirectory=/home/botuser/calorie-bot
-ExecStart=/home/botuser/calorie-bot/.venv/bin/python main.py
+EnvironmentFile=/etc/calorie-bot/op-token.env
+ExecStart=/usr/local/bin/op run --env-file /home/botuser/calorie-bot/.env -- /home/botuser/calorie-bot/.venv/bin/python main.py
 Restart=always
 RestartSec=10
 Environment=PYTHONIOENCODING=utf-8
