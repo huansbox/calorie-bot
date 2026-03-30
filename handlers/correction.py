@@ -84,6 +84,17 @@ async def handle_correction_input(update: Update, context: ContextTypes.DEFAULT_
     today_meals = get_today_meals()
     total_cal = sum(m["calories"] for m in today_meals)
 
+    # 判斷修正的餐點是否為非今天的補記
+    from datetime import datetime, timedelta, timezone
+    tw_tz = timezone(timedelta(hours=8))
+    today_tw = datetime.now(tw_tz).date()
+    recorded_at = meal.get("recorded_at", "")
+    is_backfill = False
+    if recorded_at:
+        from datetime import datetime as dt
+        recorded_date = datetime.fromisoformat(recorded_at).astimezone(tw_tz).date()
+        is_backfill = recorded_date != today_tw
+
     lines = [
         "已修正",
         f"🍱 {data['description']}",
@@ -92,6 +103,8 @@ async def handle_correction_input(update: Update, context: ContextTypes.DEFAULT_
         "",
         f"今日累計：{_format_number(total_cal)} / {_format_number(get_calorie_goal())} kcal",
     ]
+    if is_backfill:
+        lines.append(f"（此筆為 {recorded_date.strftime('%m/%d')} 的補記，累計仍顯示今日）")
 
     from handlers.food_cache import make_meal_buttons
 
