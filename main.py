@@ -10,6 +10,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from telegram.request import HTTPXRequest
 
 from config import TELEGRAM_CHAT_ID, TELEGRAM_TOKEN
 from handlers.correction import (
@@ -201,6 +202,12 @@ def main():
     app = (
         ApplicationBuilder()
         .token(TELEGRAM_TOKEN)
+        .request(HTTPXRequest(
+            connect_timeout=10.0,
+            read_timeout=20.0,
+            write_timeout=20.0,
+            pool_timeout=5.0,
+        ))
         .post_init(post_init)
         .build()
     )
