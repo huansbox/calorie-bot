@@ -8,7 +8,7 @@
 
 - **語言**: Python 3.12
 - **套件管理**: uv
-- **Bot 框架**: python-telegram-bot v22 (polling 模式)
+- **Bot 框架**: python-telegram-bot v22 (polling 模式，HTTPXRequest 自訂 timeout: read/write 20s, connect 10s)
 - **AI**: 雙引擎架構，透過 AI_PROVIDER 切換
   - Gemini 2.5 Pro (預設，JSON mode 強制合法輸出)
   - Claude Sonnet 4.6 (備選，parse_ai_response 容錯解析)
@@ -73,7 +73,7 @@ tests/
 - **食物快取**：常吃食物存 food_cache 表，記錄完成後 Inline Button 一鍵加入，/f 列出清單，輸入編號 11-99 直接記錄（可加 x 倍數如 `11 x2`）
 - **數字路由**：1-4 餐別覆蓋、11-99 快取記錄，不衝突
 - **週報**：/r 上週、/r now 本週至今，六區塊（每日收支、營養素結構、正餐比例、累積收支、體重預估vs實際、週對週），未記錄 TDEE 的天數用 BMR 補位（標 *）
-- **補記 /b**：預設昨天（比照 /t），MMDD 4位數指定日期（今天或未來自動退回上一年），可選 1-4 餐別（預設其他）。recorded_at 設為台灣正午 12:00 轉 UTC，確保落在 get_meals_by_date 查詢區間內。照片 caption 支援純餐別/日期（allow_empty_food）。已知限制：修正補記餐點後累計顯示今天而非補記日
+- **補記 /b**：預設昨天（比照 /t），MMDD 4位數指定日期（今天或未來自動退回上一年），可選 1-4 餐別（預設其他）。recorded_at 設為台灣正午 12:00 轉 UTC，確保落在 get_meals_by_date 查詢區間內。照片 caption 支援純餐別/日期（allow_empty_food）。已知限制：修正補記餐點後累計顯示今天而非補記日（已加註記提示）
 
 ## 未來想做
 
