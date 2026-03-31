@@ -25,7 +25,7 @@ config.py            # 環境變數讀取 (dotenv)，含 BMR 設定
 scheduler.py         # 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理
 handlers/
   meal.py            # 食物記錄核心 (文字/照片 → AI 分析 → DB → 回覆)，含 token 追蹤
-  weight.py          # /w 體重記錄
+  weight.py          # /w 體重記錄（含 7 日移動平均）
   tdee.py            # /t 每日消耗記錄（預設昨天，加 n 記今天，自動加 BMR）
   query.py           # /s 今日摘要
   correction.py      # 餐別覆蓋 (1-4) + /u 撤銷 + 「修正」按鈕手動修正營養素
@@ -36,7 +36,7 @@ handlers/
   backfill.py        # /b 補記過去日期的食物（預設昨天，支援 MMDD 日期 + 1-4 餐別）
 services/
   ai.py              # AI 雙引擎 (Gemini/Claude)，SYSTEM_PROMPT，parse_ai_response (有單元測試)
-  db.py              # Supabase CRUD (meals, weight_logs, daily_tdee, food_cache)
+  db.py              # Supabase CRUD (meals, weight_logs, daily_tdee, food_cache)，含體重移動平均
   nutrition.py       # 營養素計算 (三大營養素→熱量) + 格式化 (含百分比)
 tests/
   test_ai.py         # parse_ai_response 單元測試 (9 cases)
@@ -57,7 +57,7 @@ tests/
 
 - **polling 模式** (非 webhook)：簡單、不需公開 URL
 - **auth_check decorator**：單人 Bot，所有 handler 統一用 chat_id 驗證
-- **餐別**：早餐/午餐/晚餐/其他，依台灣時間自動推斷，使用者可用 1-4 覆蓋
+- **餐別**：早餐(05:00-10:30)/午餐(11:00-14:30)/晚餐(16:30-21:00)/其他，依台灣時間分鐘級推斷，使用者可用 1-4 覆蓋
 - **TDEE = BMR + 活動消耗**：BMR 固定值存 .env，/t 只需輸入手錶活動消耗
 - **/t 預設記昨天**：符合早上看手錶輸入昨日消耗的使用情境
 - **AI 雙引擎**：AI_PROVIDER 環境變數切換 gemini/claude，共用同一份 SYSTEM_PROMPT
@@ -72,12 +72,14 @@ tests/
 - **每日目標**：/g 動態調整（記憶體內，重啟回 .env 預設值）
 - **食物快取**：常吃食物存 food_cache 表，記錄完成後 Inline Button 一鍵加入，/f 列出清單，輸入編號 11-99 直接記錄（可加 x 倍數如 `11 x2`）
 - **數字路由**：1-4 餐別覆蓋、11-99 快取記錄，不衝突
-- **週報**：/r 上週、/r now 本週至今，六區塊（每日收支、營養素結構、正餐比例、累積收支、體重預估vs實際、週對週），未記錄 TDEE 的天數用 BMR 補位（標 *）
+- **週報**：/r 上週、/r now 本週至今，六區塊（每日收支、營養素結構、正餐比例、累積收支、體重預估vs實際+7日均線、週對週），未記錄 TDEE 的天數用 BMR 補位（標 *）
+- **體重 7 日移動平均**：/w 記錄後顯示均線，週報體重區段也顯示。取最近 7 筆，不足 3 筆不顯示。用於壓平量測時機造成的 1-2 kg 日間波動
 - **補記 /b**：預設昨天（比照 /t），MMDD 4位數指定日期（今天或未來自動退回上一年），可選 1-4 餐別（預設其他）。recorded_at 設為台灣正午 12:00 轉 UTC，確保落在 get_meals_by_date 查詢區間內。照片 caption 支援純餐別/日期（allow_empty_food）。已知限制：修正補記餐點後累計顯示今天而非補記日（已加註記提示）
 
 ## 未來想做
 
-- 月報統計
+- 月報統計（等資料滿 2 個月）
+- AI 校正係數：用體重趨勢反推系統性偏差，套用在非 cache 的 AI 估值上（等資料滿 6-8 週）
 - Web Dashboard
 - 食物資料庫：衛福部 TFDA API、自訂食物別名
 
