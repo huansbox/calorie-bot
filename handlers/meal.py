@@ -15,18 +15,18 @@ logger = logging.getLogger(__name__)
 TW_TZ = timezone(timedelta(hours=8))
 
 MEAL_TIME_RANGES = [
-    (5, 11, "早餐"),
-    (11, 15, "午餐"),
-    (15, 22, "晚餐"),
-    # 22-5 → 其他（default）
+    (5 * 60, 10 * 60 + 30, "早餐"),       # 05:00-10:30
+    (11 * 60, 14 * 60 + 30, "午餐"),       # 11:00-14:30
+    (16 * 60 + 30, 21 * 60, "晚餐"),       # 16:30-21:00
 ]
 
 
 def _infer_meal_type() -> str:
     """依台灣時間推斷餐別。"""
-    hour = datetime.now(TW_TZ).hour
+    now = datetime.now(TW_TZ)
+    minutes = now.hour * 60 + now.minute
     for start, end, name in MEAL_TIME_RANGES:
-        if start <= hour < end:
+        if start <= minutes < end:
             return name
     return "其他"
 
