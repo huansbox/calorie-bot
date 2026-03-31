@@ -4,7 +4,7 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from services.db import get_previous_weight, insert_weight
+from services.db import get_previous_weight, get_weight_moving_avg, insert_weight
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,11 @@ async def cmd_weight(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     insert_weight(weight)
 
-    lines = [f"⚖️ 體重記錄：{weight} kg"]
+    avg = get_weight_moving_avg(7)
+    if avg:
+        lines = [f"⚖️ 體重記錄：{weight} kg（7日均線 {avg:.1f}）"]
+    else:
+        lines = [f"⚖️ 體重記錄：{weight} kg"]
 
     if prev:
         prev_kg = float(prev["weight_kg"])

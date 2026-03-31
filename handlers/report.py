@@ -218,6 +218,12 @@ def _build_weight_section(
     else:
         lines.append("實際變化：本週無體重記錄")
 
+    from services.db import get_weight_moving_avg
+
+    avg = get_weight_moving_avg(7)
+    if avg:
+        lines.append(f"7日均線：{avg:.1f} kg")
+
     return lines
 
 

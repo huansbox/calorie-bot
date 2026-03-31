@@ -192,6 +192,26 @@ def get_previous_weight() -> dict | None:
     return result.data[1] if len(result.data) >= 2 else None
 
 
+def get_recent_weights(n: int = 7) -> list[dict]:
+    """取得最近 n 筆體重記錄（時間由舊到新）。"""
+    result = (
+        supabase.table("weight_logs")
+        .select("*")
+        .order("recorded_at", desc=True)
+        .limit(n)
+        .execute()
+    )
+    return list(reversed(result.data))
+
+
+def get_weight_moving_avg(n: int = 7) -> float | None:
+    """計算最近 n 筆體重的移動平均，不足 3 筆回傳 None。"""
+    rows = get_recent_weights(n)
+    if len(rows) < 3:
+        return None
+    return sum(float(r["weight_kg"]) for r in rows) / len(rows)
+
+
 def get_weight_range(start_date: date, end_date: date, tz_offset: int = 8) -> list[dict]:
     """取得指定日期範圍內的體重記錄，依時間排序。"""
     from datetime import timedelta
