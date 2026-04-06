@@ -52,6 +52,7 @@ tests/
 - 單元測試涵蓋 services/ai.py (JSON 解析) 與 handlers/manual_meal.py (輸入解析)
 - Windows 開發環境需設 PYTHONIOENCODING=utf-8
 - 本機啟動: `op run --env-file .env -- python main.py`（需 1Password 桌面 App 解鎖）
+- DB 查詢凡有 ORDER BY，必須包含唯一欄位（如 `id`）作為 tie-breaker，避免同 timestamp 排序不確定
 
 ## 關鍵設計決策
 

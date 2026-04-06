@@ -321,6 +321,7 @@ def get_all_cache() -> list[dict]:
         supabase.table("food_cache")
         .select("*")
         .order("created_at")
+        .order("id")
         .execute()
     )
     return result.data
@@ -335,6 +336,7 @@ def get_cache_by_index(index: int) -> dict | None:
         supabase.table("food_cache")
         .select("*")
         .order("created_at")
+        .order("id")
         .limit(1)
         .offset(offset)
         .execute()
