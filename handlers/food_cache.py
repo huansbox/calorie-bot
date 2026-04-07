@@ -131,7 +131,19 @@ async def cmd_food_cache(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("\n".join(lines))
         return
 
-    # /f 品名 delete → 刪除
+    # /f 編號 d → 依編號刪除
+    m = re.match(r'^(\d+)\s*d$', content)
+    if m:
+        index = int(m.group(1))
+        item = get_cache_by_index(index)
+        if item:
+            delete_cache_by_name(item["description"])
+            await update.message.reply_text(f"已刪除快取：{item['description']}")
+        else:
+            await update.message.reply_text(f"查無編號 {index} 的快取項目")
+        return
+
+    # /f 品名 delete → 依品名刪除
     if content.endswith(" delete"):
         name = content[:-7].strip()
         if delete_cache_by_name(name):
@@ -152,6 +164,7 @@ async def cmd_food_cache(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "用法：\n"
             "/f 品名 熱量 蛋白質 碳水 脂肪\n"
+            "/f 編號 d\n"
             "/f 品名 delete"
         )
         return
