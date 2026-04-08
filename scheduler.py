@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram.ext import Application
 
-from config import AI_PROVIDER, PUSH_HOUR, TELEGRAM_CHAT_ID, get_calorie_goal
+from config import PUSH_HOUR, TELEGRAM_CHAT_ID, get_calorie_goal
 from services.nutrition import format_macros
 from services.db import (
     clear_image_path,
@@ -81,6 +81,8 @@ async def weekly_nutrition_report(app: Application):
 _PRICING = {
     "gemini": {"input": 1.25, "output": 10.0, "thinking": 10.0},
     "claude": {"input": 3.0, "output": 15.0, "thinking": 0},
+    "claude-api": {"input": 3.0, "output": 15.0, "thinking": 0},
+    "claude-cli": {"input": 0, "output": 0, "thinking": 0},
 }
 
 
@@ -99,29 +101,51 @@ def _calc_api_cost(
     )
 
 
+_PROVIDER_LABEL = {
+    "gemini": "Gemini",
+    "claude-api": "Claude API",
+    "claude-cli": "Claude CLI (Max)",
+}
+
+
 async def weekly_api_report(app: Application):
-    """每週一推播 API 用量與費用。"""
+    """每週一推播 API 用量與費用（依 provider 分組）。"""
     usage = get_weekly_token_usage()
     if usage["count"] == 0:
         return
 
-    total_cost = _calc_api_cost(
-        input_tokens=usage["input_tokens"],
-        output_tokens=usage["output_tokens"],
-        thinking_tokens=usage["thinking_tokens"],
-        provider=AI_PROVIDER,
-    )
+    by_provider = usage.get("by_provider", {})
 
     lines = [
         "📈 本週 API 用量",
         "",
-        f"分析次數：{usage['count']} 次",
-        f"Input tokens：{_fmt(usage['input_tokens'])}",
-        f"Output tokens：{_fmt(usage['output_tokens'])}",
+        f"總分析次數：{usage['count']} 次",
     ]
-    if usage["thinking_tokens"] > 0:
-        lines.append(f"Thinking tokens：{_fmt(usage['thinking_tokens'])}")
-    lines.append(f"預估費用：${total_cost:.4f} USD")
+
+    total_cost = 0.0
+    for provider, data in sorted(by_provider.items()):
+        cost = _calc_api_cost(
+            input_tokens=data["input_tokens"],
+            output_tokens=data["output_tokens"],
+            thinking_tokens=data["thinking_tokens"],
+            provider=provider,
+        )
+        total_cost += cost
+        label = _PROVIDER_LABEL.get(provider, provider)
+
+        lines.append("")
+        lines.append(f"【{label}】{data['count']} 次")
+        lines.append(f"  Input: {_fmt(data['input_tokens'])} tokens")
+        lines.append(f"  Output: {_fmt(data['output_tokens'])} tokens")
+        if data["thinking_tokens"] > 0:
+            lines.append(f"  Thinking: {_fmt(data['thinking_tokens'])} tokens")
+        if cost > 0:
+            lines.append(f"  費用：${cost:.4f}")
+        else:
+            lines.append(f"  費用：$0 (Max 訂閱)")
+
+    lines.append("")
+    lines.append(f"預估總費用：${total_cost:.4f} USD")
 
     await app.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text="\n".join(lines))
     logger.info("Weekly API report sent")

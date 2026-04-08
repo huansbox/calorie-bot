@@ -28,6 +28,7 @@ def insert_meal(
     output_tokens: int = 0,
     thinking_tokens: int = 0,
     recorded_at: str | None = None,
+    ai_provider: str | None = None,
 ) -> dict:
     """新增一筆飲食記錄，回傳插入的 row。"""
     row = {
@@ -48,6 +49,8 @@ def insert_meal(
     }
     if recorded_at is not None:
         row["recorded_at"] = recorded_at
+    if ai_provider is not None:
+        row["ai_provider"] = ai_provider
     result = supabase.table("meals").insert(row).execute()
     logger.info("Inserted meal: %s", result.data[0]["id"])
     return result.data[0]
@@ -111,7 +114,7 @@ def get_meals_by_week(start_date: date, end_date: date, tz_offset: int = 8) -> l
 
 
 def get_weekly_token_usage(tz_offset: int = 8) -> dict:
-    """取得過去 7 天的 token 用量總計。"""
+    """取得過去 7 天的 token 用量總計，依 provider 分組。"""
     from datetime import timedelta
 
     now_tw = datetime.now(timezone.utc) + timedelta(hours=tz_offset)
@@ -120,19 +123,36 @@ def get_weekly_token_usage(tz_offset: int = 8) -> dict:
 
     result = (
         supabase.table("meals")
-        .select("input_tokens, output_tokens, thinking_tokens")
+        .select("input_tokens, output_tokens, thinking_tokens, ai_provider")
         .gte("recorded_at", utc_start.isoformat())
         .gt("input_tokens", 0)
         .execute()
     )
-    total_input = sum(r.get("input_tokens", 0) or 0 for r in result.data)
-    total_output = sum(r.get("output_tokens", 0) or 0 for r in result.data)
-    total_thinking = sum(r.get("thinking_tokens", 0) or 0 for r in result.data)
+
+    by_provider: dict[str, dict] = {}
+    for r in result.data:
+        # 歷史資料 ai_provider 為 NULL，此專案上線至今全用 Gemini
+        provider = r.get("ai_provider") or "gemini"
+        if provider not in by_provider:
+            by_provider[provider] = {
+                "input_tokens": 0, "output_tokens": 0,
+                "thinking_tokens": 0, "count": 0,
+            }
+        by_provider[provider]["input_tokens"] += r.get("input_tokens", 0) or 0
+        by_provider[provider]["output_tokens"] += r.get("output_tokens", 0) or 0
+        by_provider[provider]["thinking_tokens"] += r.get("thinking_tokens", 0) or 0
+        by_provider[provider]["count"] += 1
+
+    total_input = sum(p["input_tokens"] for p in by_provider.values())
+    total_output = sum(p["output_tokens"] for p in by_provider.values())
+    total_thinking = sum(p["thinking_tokens"] for p in by_provider.values())
+
     return {
         "input_tokens": total_input,
         "output_tokens": total_output,
         "thinking_tokens": total_thinking,
-        "count": len(result.data),
+        "count": sum(p["count"] for p in by_provider.values()),
+        "by_provider": by_provider,
     }
 
 

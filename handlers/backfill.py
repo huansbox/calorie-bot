@@ -189,6 +189,7 @@ async def _process_backfill(
         output_tokens=result.output_tokens,
         thinking_tokens=result.thinking_tokens,
         recorded_at=recorded_at,
+        ai_provider=result.provider,
     )
 
     # 該日累計（非 get_today_meals）

@@ -3,7 +3,7 @@ import json
 import logging
 from dataclasses import dataclass
 
-from config import AI_PROVIDER, ANTHROPIC_API_KEY, GEMINI_API_KEY
+from config import AI_PROVIDER, ANTHROPIC_API_KEY, CLAUDE_CLI_PATH, GEMINI_API_KEY
 from services.nutrition import calc_calories
 
 logger = logging.getLogger(__name__)
@@ -73,6 +73,7 @@ class FoodAnalysis:
     input_tokens: int = 0
     output_tokens: int = 0
     thinking_tokens: int = 0
+    provider: str = ""
 
 
 def parse_ai_response(raw: str) -> FoodAnalysis:
@@ -109,13 +110,17 @@ def parse_ai_response(raw: str) -> FoodAnalysis:
     carbs_g = float(data["carbs_g"])
     fat_g = float(data["fat_g"])
 
+    conf = data.get("confidence", "medium")
+    if isinstance(conf, (int, float)):
+        conf = "high" if conf >= 0.8 else "medium" if conf >= 0.5 else "low"
+
     return FoodAnalysis(
         description=data["description"],
         calories=calc_calories(protein_g, carbs_g, fat_g),
         protein_g=protein_g,
         carbs_g=carbs_g,
         fat_g=fat_g,
-        confidence=data["confidence"],
+        confidence=conf,
         note=data.get("note", ""),
     )
 
@@ -197,6 +202,7 @@ async def _analyze_gemini(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         thinking_tokens=thinking_tokens,
+        provider="gemini",
     )
 
 
@@ -250,6 +256,65 @@ async def _analyze_claude(
     result = parse_ai_response(raw)
     result.input_tokens = response.usage.input_tokens
     result.output_tokens = response.usage.output_tokens
+    result.provider = "claude-api"
+    return result
+
+
+# ── Claude CLI ────────────────────────────────────────
+
+
+async def _analyze_claude_cli(
+    text: str | None = None,
+    image_path: str | None = None,
+) -> FoodAnalysis:
+    """透過 claude -p CLI 分析食物（使用 Max 訂閱，零 API 費用）。"""
+    import asyncio
+    import os
+
+    prompt_parts = [SYSTEM_PROMPT, "\n\n---\n\n"]
+    if text:
+        prompt_parts.append(f"使用者輸入：{text}")
+    if image_path:
+        abs_path = os.path.abspath(image_path)
+        prompt_parts.append(f"\n請讀取並分析這張食物照片：{abs_path}")
+    if not text and not image_path:
+        raise ValueError("至少需要提供文字或照片")
+
+    cmd = [CLAUDE_CLI_PATH, "-p", "".join(prompt_parts), "--output-format", "json"]
+    if image_path:
+        cmd.extend(["--allowedTools", "Read"])
+
+    logger.info("Calling claude -p CLI for food analysis")
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=60)
+    except asyncio.TimeoutError:
+        if process.returncode is None:
+            process.kill()
+            await process.wait()
+        raise ValueError("claude -p 逾時 (60s)")
+
+    if process.returncode != 0:
+        err_msg = stderr.decode("utf-8", errors="replace")[:200] if stderr else "unknown"
+        raise ValueError(f"claude -p 非零結束碼 ({process.returncode}): {err_msg}")
+
+    output = json.loads(stdout.decode("utf-8"))
+    raw_text = output.get("result", "")
+    if not raw_text:
+        raise ValueError("claude -p 回傳空結果")
+
+    logger.info("claude -p raw result: %s", raw_text[:300])
+    result = parse_ai_response(raw_text)
+
+    # 從 envelope 提取 token 用量（資訊記錄用，費用為 $0）
+    usage = output.get("usage", {})
+    result.input_tokens = usage.get("input_tokens", 0) or 0
+    result.output_tokens = usage.get("output_tokens", 0) or 0
+    result.provider = "claude-cli"
     return result
 
 
@@ -260,7 +325,22 @@ async def analyze_food(
     text: str | None = None,
     image_path: str | None = None,
 ) -> FoodAnalysis:
-    """分析食物，依 AI_PROVIDER 設定自動選擇 Gemini 或 Claude。"""
+    """分析食物：Gemini API → claude -p CLI fallback。
+
+    若 AI_PROVIDER="claude" 則直接使用 Claude API（無 fallback）。
+    """
     if AI_PROVIDER == "claude":
         return await _analyze_claude(text=text, image_path=image_path)
-    return await _analyze_gemini(text=text, image_path=image_path)
+
+    # Primary: Gemini
+    try:
+        return await _analyze_gemini(text=text, image_path=image_path)
+    except Exception as e:
+        logger.warning("Gemini 分析失敗，切換至 claude -p: %s", e)
+
+    # Fallback: claude -p CLI
+    try:
+        return await _analyze_claude_cli(text=text, image_path=image_path)
+    except Exception as e:
+        logger.error("claude -p 也失敗: %s", e)
+        raise RuntimeError("AI 分析全部失敗（Gemini + claude -p）") from e

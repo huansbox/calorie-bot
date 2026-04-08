@@ -65,3 +65,18 @@ class TestParseAiResponse:
         raw = '{"description":"滷肉飯","calories":999,"protein_g":28.0,"carbs_g":88.0,"fat_g":20.0,"confidence":"high","note":""}'
         result = parse_ai_response(raw)
         assert result.calories == 644  # not 999
+
+    def test_numeric_confidence_high(self):
+        raw = '{"description":"牛肉麵","protein_g":30.0,"carbs_g":60.0,"fat_g":15.0,"confidence":0.9,"note":""}'
+        result = parse_ai_response(raw)
+        assert result.confidence == "high"
+
+    def test_numeric_confidence_medium(self):
+        raw = '{"description":"牛肉麵","protein_g":30.0,"carbs_g":60.0,"fat_g":15.0,"confidence":0.6,"note":""}'
+        result = parse_ai_response(raw)
+        assert result.confidence == "medium"
+
+    def test_numeric_confidence_low(self):
+        raw = '{"description":"牛肉麵","protein_g":30.0,"carbs_g":60.0,"fat_g":15.0,"confidence":0.3,"note":""}'
+        result = parse_ai_response(raw)
+        assert result.confidence == "low"

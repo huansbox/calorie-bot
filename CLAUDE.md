@@ -9,10 +9,11 @@
 - **語言**: Python 3.12
 - **套件管理**: uv
 - **Bot 框架**: python-telegram-bot v22 (polling 模式，HTTPXRequest 自訂 timeout: read/write 20s, connect 10s)
-- **AI**: 雙引擎架構，透過 AI_PROVIDER 切換
+- **AI**: Gemini 優先 + claude -p CLI 自動 fallback
   - Gemini 2.5 Pro (預設，JSON mode 強制合法輸出)
-  - Claude Sonnet 4.6 (備選，parse_ai_response 容錯解析)
-- **資料庫**: Supabase (PostgreSQL) — meals, weight_logs, daily_tdee, food_cache 四張表，全部啟用 RLS，使用 Secret Key 繞過
+  - claude -p CLI (fallback，走 Max 訂閱零費用，透過 subprocess 呼叫)
+  - Claude Sonnet 4.6 API (備選，AI_PROVIDER=claude 時使用)
+- **資料庫**: Supabase (PostgreSQL) — meals（含 ai_provider 欄位）, weight_logs, daily_tdee, food_cache 四張表，全部啟用 RLS，使用 Secret Key 繞過
 - **排程**: APScheduler (AsyncIOScheduler) — 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理
 - **密鑰管理**: 1Password — 本機 `op run` + VPS Service Account，`.env` 只存 `op://` 參照
 - **部署**: RackNerd VPS (Ubuntu 24.04, systemd + `op run`)
@@ -35,11 +36,11 @@ handlers/
   report.py          # /r 週報 + /r now 本週至今，週一自動推播
   backfill.py        # /b 補記過去日期的食物（預設昨天，支援 MMDD 日期 + 1-4 餐別）
 services/
-  ai.py              # AI 雙引擎 (Gemini/Claude)，SYSTEM_PROMPT，parse_ai_response (有單元測試)
+  ai.py              # AI 引擎 (Gemini/Claude CLI/Claude API)，SYSTEM_PROMPT，parse_ai_response (有單元測試)
   db.py              # Supabase CRUD (meals, weight_logs, daily_tdee, food_cache)，含體重移動平均
   nutrition.py       # 營養素計算 (三大營養素→熱量) + 格式化 (含百分比)
 tests/
-  test_ai.py         # parse_ai_response 單元測試 (9 cases)
+  test_ai.py         # parse_ai_response 單元測試 (12 cases，含 confidence 數字轉換)
   test_manual_meal.py # 手動記錄解析函式測試
   test_backfill.py   # 補記解析 + UTC 換算測試 (24 cases)
   test_nutrition.py  # 營養素計算與格式化測試
@@ -61,11 +62,13 @@ tests/
 - **餐別**：早餐(05:00-10:30)/午餐(11:00-14:30)/晚餐(16:30-21:00)/其他，依台灣時間分鐘級推斷，使用者可用 1-4 覆蓋
 - **TDEE = BMR + 活動消耗**：BMR 固定值存 .env，/t 只需輸入手錶活動消耗
 - **/t 預設記昨天**：符合早上看手錶輸入昨日消耗的使用情境
-- **AI 雙引擎**：AI_PROVIDER 環境變數切換 gemini/claude，共用同一份 SYSTEM_PROMPT
+- **AI fallback 鏈**：Gemini API → claude -p CLI → 錯誤訊息。AI_PROVIDER=claude 時直接走 Claude API（無 fallback）
+- **claude -p CLI**：透過 subprocess 呼叫 VPS 上的 Claude Code CLI，走 Max 訂閱零費用。有圖片時加 `--allowedTools Read`，timeout 60s
+- **ai_provider 追蹤**：meals 表 `ai_provider` 欄位記錄判讀來源（gemini/claude-cli/claude-api/null），週報依 provider 分組計費
 - **Gemini JSON mode**：response_mime_type + response_json_schema 強制合法 JSON 輸出
-- **Claude JSON 容錯**：parse_ai_response 處理 code fence、畸形 JSON (如 `>` 替代 `:`)
+- **Claude JSON 容錯**：parse_ai_response 處理 code fence、畸形 JSON (如 `>` 替代 `:`)、confidence 數字→字串轉換
 - **圖片 24 小時過期**：暫存 data/media/，排程清理
-- **API 費用追蹤**：每筆 meal 記錄 input/output tokens，週一推播週報
+- **API 費用追蹤**：每筆 meal 記錄 input/output tokens + ai_provider，週一推播週報（依 provider 分組，claude-cli 費用為 $0）
 - **ai_confidence 觀察中**：Gemini 幾乎不回 low/medium（Prompt 指示未被嚴格遵守），目前保留欄位觀察，未來可能移除。區分 AI vs 手動用 input_tokens=0 即可
 - **手動記錄**：三種免 AI 輸入方式 — 貼上 Bot 回覆、@前綴快速輸入、/m 指令，末尾可加 x 倍數（如 x2, x0.5）
 - **手動修正**：AI 分析回覆附「修正」按鈕，點擊後輸入正確值直接更新該筆記錄

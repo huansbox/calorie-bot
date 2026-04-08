@@ -13,6 +13,7 @@ SUPABASE_KEY: str = os.environ["SUPABASE_KEY"]
 AI_PROVIDER: str = os.getenv("AI_PROVIDER", "gemini")  # "gemini" or "claude"
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+CLAUDE_CLI_PATH: str = os.getenv("CLAUDE_CLI_PATH", "/root/.local/bin/claude")
 
 DAILY_CALORIE_GOAL: int = int(os.getenv("DAILY_CALORIE_GOAL", "2000"))
 _calorie_goal: int = DAILY_CALORIE_GOAL
