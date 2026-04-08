@@ -1,6 +1,6 @@
 # Calorie Bot
 
-Telegram 體重管理 Bot，傳食物照片或文字自動分析營養素並記錄。支援 Gemini / Claude 雙 AI 引擎切換。
+Telegram 體重管理 Bot，傳食物照片或文字自動分析營養素並記錄。Gemini API 優先，失敗時自動 fallback 到 claude -p CLI（Max 訂閱零費用）。
 
 ## 功能
 
@@ -70,9 +70,10 @@ cp .env.example .env
 | `TELEGRAM_CHAT_ID` | 你的 Telegram chat ID | 是 |
 | `SUPABASE_URL` | Supabase Project URL | 是 |
 | `SUPABASE_KEY` | Supabase Secret Key（Settings → API Keys） | 是 |
-| `AI_PROVIDER` | `gemini` 或 `claude` (預設 gemini) | 否 |
+| `AI_PROVIDER` | `gemini`（預設，含 claude -p fallback）或 `claude`（直接用 API） | 否 |
 | `GEMINI_API_KEY` | Google AI Studio 取得 | AI_PROVIDER=gemini 時必填 |
 | `ANTHROPIC_API_KEY` | Anthropic Console 取得 | AI_PROVIDER=claude 時必填 |
+| `CLAUDE_CLI_PATH` | claude CLI 路徑 (預設 /root/.local/bin/claude) | 否 |
 | `DAILY_CALORIE_GOAL` | 每日攝取目標 kcal (預設 2000) | 否 |
 | `BMR` | 基礎代謝率 kcal (預設 1577) | 否 |
 | `PUSH_HOUR` | 每日推播時間 (預設 8) | 否 |
@@ -85,6 +86,7 @@ cp .env.example .env
 ```sql
 ALTER TABLE meals ADD COLUMN input_tokens INTEGER DEFAULT 0;
 ALTER TABLE meals ADD COLUMN output_tokens INTEGER DEFAULT 0;
+ALTER TABLE meals ADD COLUMN ai_provider TEXT;
 ```
 
 ### 4. 本機啟動
