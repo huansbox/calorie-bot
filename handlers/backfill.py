@@ -197,8 +197,9 @@ async def _process_backfill(
     total_cal = sum(m["calories"] for m in day_meals)
     date_str = _format_date(target_date)
 
+    provider_tag = " ⚡ Claude CLI" if result.provider == "claude-cli" else ""
     lines = [
-        f"補記完成（{date_str}）",
+        f"補記完成（{date_str}）{provider_tag}",
         f"🍱 {result.description}",
         f"熱量：{_format_number(result.calories)} kcal",
         *format_macros(result.protein_g, result.carbs_g, result.fat_g),
