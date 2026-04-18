@@ -62,6 +62,13 @@ def parse_bot_reply(text: str) -> dict:
     }
 
 
+_AT_PARSE_RE = re.compile(
+    r'^(.+?)\s*(\d+(?:\.\d+)?)'
+    r'(?:\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?))?'
+    r'\s*$'
+)
+
+
 def parse_at_input(text: str) -> dict:
     """解析 @ 手動輸入格式。
 
@@ -69,59 +76,45 @@ def parse_at_input(text: str) -> dict:
         @品名 熱量
         @品名 熱量 蛋白質 碳水 脂肪
         末尾可加 x倍數（如 x2, x0.5）
+        品名與第一個數字間沒空格也可（如「胺基酸能量飲101.7 2.7 22.7 0」）
     """
     content = text.strip()[1:].strip()  # 去掉 @
 
-    # 偵測末尾乘數：x2, x0.5 等
     multiplier = 1.0
     mult_match = re.search(r'\s+[xX](\d+(?:\.\d+)?)\s*$', content)
     if mult_match:
         multiplier = float(mult_match.group(1))
         content = content[:mult_match.start()]
 
-    # 從後面找數字，品名是前面的部分
-    # 支援：@起司蛋餅 350 15 30 18 或 @御飯糰 280
-    parts = content.rsplit(maxsplit=4)
+    m = _AT_PARSE_RE.match(content)
+    if not m:
+        raise ValueError(
+            "格式錯誤，請使用：\n"
+            "@品名 熱量\n"
+            "@品名 熱量 蛋白質 碳水 脂肪"
+        )
 
-    if len(parts) >= 5:
-        # 嘗試：品名 熱量 蛋白質 碳水 脂肪
-        name_parts, nums = parts[:-4], parts[-4:]
-        try:
-            calories = int(round(float(nums[0])))
-            protein_g = float(nums[1])
-            carbs_g = float(nums[2])
-            fat_g = float(nums[3])
-            description = " ".join(name_parts) if name_parts else nums[0]
-            return _apply_multiplier({
-                "description": description,
-                "calories": calories,
-                "protein_g": protein_g,
-                "carbs_g": carbs_g,
-                "fat_g": fat_g,
-            }, multiplier)
-        except ValueError:
-            pass
+    description = m.group(1).strip()
+    # 品名需至少含一個非數字字元，避免 @500 被當成合法輸入
+    if not re.search(r'[^\d.\s]', description):
+        raise ValueError(
+            "格式錯誤，請使用：\n"
+            "@品名 熱量\n"
+            "@品名 熱量 蛋白質 碳水 脂肪"
+        )
 
-    if len(parts) >= 2:
-        # 嘗試：品名 熱量
-        name_parts, num = parts[:-1], parts[-1]
-        try:
-            calories = int(round(float(num)))
-            return _apply_multiplier({
-                "description": " ".join(name_parts),
-                "calories": calories,
-                "protein_g": 0.0,
-                "carbs_g": 0.0,
-                "fat_g": 0.0,
-            }, multiplier)
-        except ValueError:
-            pass
+    calories = int(round(float(m.group(2))))
+    protein_g = float(m.group(3)) if m.group(3) else 0.0
+    carbs_g = float(m.group(4)) if m.group(4) else 0.0
+    fat_g = float(m.group(5)) if m.group(5) else 0.0
 
-    raise ValueError(
-        "格式錯誤，請使用：\n"
-        "@品名 熱量\n"
-        "@品名 熱量 蛋白質 碳水 脂肪"
-    )
+    return _apply_multiplier({
+        "description": description,
+        "calories": calories,
+        "protein_g": protein_g,
+        "carbs_g": carbs_g,
+        "fat_g": fat_g,
+    }, multiplier)
 
 
 def _apply_multiplier(data: dict, multiplier: float) -> dict:

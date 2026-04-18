@@ -209,3 +209,20 @@ class TestParseAtInput:
         result = parse_at_input("@蛋 80 X3")
         assert result["description"] == "蛋 x3"
         assert result["calories"] == 240
+
+    def test_name_glued_to_first_number_with_macros(self):
+        result = parse_at_input("@amino vital 胺基酸能量飲101.7 2.7 22.7 0")
+        assert result["description"] == "amino vital 胺基酸能量飲"
+        assert result["calories"] == 102
+        assert result["protein_g"] == 2.7
+        assert result["carbs_g"] == 22.7
+        assert result["fat_g"] == 0.0
+
+    def test_name_glued_to_calories_only(self):
+        result = parse_at_input("@咖啡35")
+        assert result["description"] == "咖啡"
+        assert result["calories"] == 35
+
+    def test_digits_only_raises(self):
+        with pytest.raises(ValueError):
+            parse_at_input("@500")
