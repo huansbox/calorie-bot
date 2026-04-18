@@ -39,11 +39,19 @@ _CACHE_RE = re.compile(r'^(\d+)(?:\s*[xX](\d+(?:\.\d+)?))?\s*$')
 
 def is_cache_number(text: str) -> bool:
     """判斷是否為快取編號（11-99，可帶乘數如 11 x2）。"""
+    return parse_cache_number(text) is not None
+
+
+def parse_cache_number(text: str) -> tuple[int, float] | None:
+    """解析快取編號與乘數，不合法回 None。"""
     match = _CACHE_RE.match(text.strip())
     if not match:
-        return False
+        return None
     n = int(match.group(1))
-    return 11 <= n <= 99
+    if not (11 <= n <= 99):
+        return None
+    multiplier = float(match.group(2) or 1)
+    return n, multiplier
 
 
 async def handle_cache_number(update: Update, context: ContextTypes.DEFAULT_TYPE):

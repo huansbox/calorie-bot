@@ -100,7 +100,18 @@ async def cmd_backfill(update: "Update", context: "ContextTypes.DEFAULT_TYPE"):
         await update.message.reply_text(
             f"{e}\n\n用法：/b [1-4] 食物描述 [MMDD]\n"
             f"例：/b 雞排便當\n"
-            f"例：/b 2 雞排便當 0325"
+            f"例：/b 2 雞排便當 0325\n"
+            f"例：/b 2 26 0325（快取編號）"
+        )
+        return
+
+    from handlers.food_cache import parse_cache_number
+
+    cache_hit = parse_cache_number(food_text)
+    if cache_hit is not None:
+        index, multiplier = cache_hit
+        await _process_backfill_cache(
+            update, context, meal_type, target_date, index, multiplier,
         )
         return
 
@@ -141,6 +152,74 @@ async def handle_backfill_photo(update: "Update", context: "ContextTypes.DEFAULT
         update, context, meal_type, target_date,
         text=food_text or None, image_path=str(local_path),
     )
+
+
+async def _process_backfill_cache(
+    update: "Update",
+    context: "ContextTypes.DEFAULT_TYPE",
+    meal_type: str,
+    target_date: date,
+    index: int,
+    multiplier: float,
+):
+    """快取編號補記：略過 AI，直接用 food_cache 的值寫入指定日期。"""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    from config import get_calorie_goal
+    from handlers.manual_meal import _apply_multiplier
+    from services.db import get_cache_by_index, get_meals_by_date, insert_meal
+    from services.nutrition import format_macros
+
+    item = get_cache_by_index(index)
+    if not item:
+        await update.message.reply_text("查無快取項目，請先 /f 查看清單")
+        return
+
+    values = _apply_multiplier({
+        "description": item["description"],
+        "calories": item["calories"],
+        "protein_g": item["protein_g"],
+        "carbs_g": item["carbs_g"],
+        "fat_g": item["fat_g"],
+    }, multiplier)
+
+    row = insert_meal(
+        meal_type=meal_type,
+        description=values["description"],
+        calories=values["calories"],
+        protein_g=values["protein_g"],
+        carbs_g=values["carbs_g"],
+        fat_g=values["fat_g"],
+        raw_input=update.message.text,
+        ai_confidence="high",
+        input_tokens=0,
+        output_tokens=0,
+        recorded_at=date_to_recorded_at(target_date),
+    )
+
+    day_meals = get_meals_by_date(target_date)
+    total_cal = sum(m["calories"] for m in day_meals)
+    date_str = _format_date(target_date)
+
+    lines = [
+        f"補記完成（{date_str}，快取）",
+        f"🍱 {values['description']}",
+        f"熱量：{_format_number(values['calories'])} kcal",
+        *format_macros(values["protein_g"], values["carbs_g"], values["fat_g"]),
+        f"餐別：{meal_type}",
+        "",
+        f"{date_str} 累計：{_format_number(total_cal)} / {_format_number(get_calorie_goal())} kcal",
+    ]
+
+    buttons = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("改為其他", callback_data=f"mtype:{row['id']}"),
+            InlineKeyboardButton("修正", callback_data=f"correct:{row['id']}"),
+        ]
+    ])
+    msg = await update.message.reply_text("\n".join(lines), reply_markup=buttons)
+    context.user_data["last_meal_id"] = row["id"]
+    context.user_data["last_meal_message_id"] = msg.message_id
 
 
 async def _process_backfill(
