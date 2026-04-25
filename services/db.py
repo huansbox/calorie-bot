@@ -71,6 +71,7 @@ def get_today_meals(tz_offset: int = 8) -> list[dict]:
         .gte("recorded_at", utc_start.isoformat())
         .lt("recorded_at", utc_end.isoformat())
         .order("recorded_at")
+        .order("id")
         .execute()
     )
     return result.data
@@ -90,6 +91,7 @@ def get_meals_by_date(target_date: date, tz_offset: int = 8) -> list[dict]:
         .gte("recorded_at", utc_start.isoformat())
         .lt("recorded_at", utc_end.isoformat())
         .order("recorded_at")
+        .order("id")
         .execute()
     )
     return result.data
@@ -108,6 +110,7 @@ def get_meals_by_week(start_date: date, end_date: date, tz_offset: int = 8) -> l
         .gte("recorded_at", utc_start.isoformat())
         .lt("recorded_at", utc_end.isoformat())
         .order("recorded_at")
+        .order("id")
         .execute()
     )
     return result.data
@@ -162,6 +165,7 @@ def get_last_meal() -> dict | None:
         supabase.table("meals")
         .select("*")
         .order("recorded_at", desc=True)
+        .order("id", desc=True)
         .limit(1)
         .execute()
     )
@@ -194,6 +198,7 @@ def get_last_weight() -> dict | None:
         supabase.table("weight_logs")
         .select("*")
         .order("recorded_at", desc=True)
+        .order("id", desc=True)
         .limit(1)
         .execute()
     )
@@ -206,6 +211,7 @@ def get_previous_weight() -> dict | None:
         supabase.table("weight_logs")
         .select("*")
         .order("recorded_at", desc=True)
+        .order("id", desc=True)
         .limit(2)
         .execute()
     )
@@ -218,6 +224,7 @@ def get_recent_weights(n: int = 7) -> list[dict]:
         supabase.table("weight_logs")
         .select("*")
         .order("recorded_at", desc=True)
+        .order("id", desc=True)
         .limit(n)
         .execute()
     )
@@ -245,6 +252,7 @@ def get_weight_range(start_date: date, end_date: date, tz_offset: int = 8) -> li
         .gte("recorded_at", utc_start.isoformat())
         .lt("recorded_at", utc_end.isoformat())
         .order("recorded_at")
+        .order("id")
         .execute()
     )
     return result.data
