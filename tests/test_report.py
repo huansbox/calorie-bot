@@ -77,10 +77,14 @@ class TestBuildDailyTdeeMap:
         result = _build_daily_tdee_map(date(2026, 4, 19), date(2026, 4, 19), daily_cal, [])
         assert result == {date(2026, 4, 19): (BMR, True)}
 
-    def test_no_data_skipped(self):
-        # 沒食物也沒 TDEE → 不在 map 中
-        result = _build_daily_tdee_map(date(2026, 4, 19), date(2026, 4, 19), {}, [])
-        assert date(2026, 4, 19) not in result
+    def test_no_data_day_in_range_skipped(self):
+        # 多日範圍，中間 4/20 無資料 → 不出現在 map（其他天有資料）
+        daily_cal = {date(2026, 4, 19): 1500}
+        tdee_rows = [{"date": "2026-04-21", "tdee_kcal": 2000}]
+        result = _build_daily_tdee_map(date(2026, 4, 19), date(2026, 4, 21), daily_cal, tdee_rows)
+        assert date(2026, 4, 19) in result
+        assert date(2026, 4, 20) not in result
+        assert date(2026, 4, 21) in result
 
     def test_mixed_range(self):
         from config import BMR
