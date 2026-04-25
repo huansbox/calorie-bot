@@ -45,13 +45,16 @@ tests/
   test_backfill.py   # 補記解析 + UTC 換算測試 (24 cases)
   test_nutrition.py  # 營養素計算與格式化測試 (5 cases)
   test_cost.py       # API 費用計算測試 (3 cases，Gemini/Claude/claude-cli 費率)
+  test_food_cache.py # parse_cache_number / is_cache_number 測試 (13 cases)
+  test_correction.py # is_meal_type_correction 測試 (5 cases)
+  test_report.py     # 週報 helper 測試 (24 cases，每日 map + 4 section)
 ```
 
 ## 開發慣例
 
 - 所有變更開 feature branch，合併回 main
 - Commit 遵循 Conventional Commits
-- 單元測試涵蓋 services/ai.py (JSON 解析)、services/nutrition.py (營養素計算)、handlers/manual_meal.py (輸入解析)、handlers/backfill.py (補記解析 + UTC) 與 API 費用計算
+- 單元測試涵蓋 services/ai.py、services/nutrition.py、handlers/manual_meal.py、handlers/backfill.py、handlers/food_cache.py (快取編號)、handlers/correction.py (餐別覆蓋)、handlers/report.py (週報 helper) 與 API 費用計算
 - Windows 開發環境需設 PYTHONIOENCODING=utf-8
 - 本機啟動: `op run --env-file .env -- python main.py`（需 1Password 桌面 App 解鎖）
 - DB 查詢凡有 ORDER BY，必須包含唯一欄位（如 `id`）作為 tie-breaker，避免同 timestamp 排序不確定
