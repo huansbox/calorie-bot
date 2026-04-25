@@ -59,6 +59,19 @@ class TestBuildDailyIntakeMap:
         result = _build_daily_intake_map(meals)
         assert result == {date(2026, 4, 19): 500}
 
+    def test_aware_taiwan_offset_format(self):
+        # 若 DB 改回傳 +08:00 字串，astimezone 應正確處理而非雙重加 8h
+        # 台灣 4/19 09:00 +08:00 → 台灣日期 4/19
+        meals = [_meal("2026-04-19T09:00:00+08:00", 500)]
+        result = _build_daily_intake_map(meals)
+        assert result == {date(2026, 4, 19): 500}
+
+    def test_aware_taiwan_offset_late_night(self):
+        # 台灣 4/19 23:30 +08:00 應算 4/19，不是被誤判為 4/20
+        meals = [_meal("2026-04-19T23:30:00+08:00", 500)]
+        result = _build_daily_intake_map(meals)
+        assert result == {date(2026, 4, 19): 500}
+
 
 class TestBuildDailyTdeeMap:
     def test_empty(self):

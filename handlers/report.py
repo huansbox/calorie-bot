@@ -52,7 +52,10 @@ def _build_daily_intake_map(meals: list[dict]) -> dict[date, int]:
     daily_cal: dict[date, int] = defaultdict(int)
     for m in meals:
         rec = datetime.fromisoformat(m["recorded_at"])
-        tw_date = (rec + timedelta(hours=8)).date()
+        # naive 視為 UTC（DB 寫入端統一使用 UTC ISO 字串）
+        if rec.tzinfo is None:
+            rec = rec.replace(tzinfo=timezone.utc)
+        tw_date = rec.astimezone(TW_TZ).date()
         daily_cal[tw_date] += m["calories"] or 0
     return daily_cal
 
