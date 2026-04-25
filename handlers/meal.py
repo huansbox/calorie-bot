@@ -100,6 +100,7 @@ async def _process_food(
         output_tokens=result.output_tokens,
         thinking_tokens=result.thinking_tokens,
         ai_provider=result.provider,
+        ai_model=result.ai_model,
     )
 
     # 計算今日累計

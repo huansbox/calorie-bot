@@ -1,6 +1,6 @@
 import pytest
 
-from services.ai import FoodAnalysis, parse_ai_response
+from services.ai import FoodAnalysis, _normalize_model_name, parse_ai_response
 
 
 class TestParseAiResponse:
@@ -80,3 +80,17 @@ class TestParseAiResponse:
         raw = '{"description":"牛肉麵","protein_g":30.0,"carbs_g":60.0,"fat_g":15.0,"confidence":0.3,"note":""}'
         result = parse_ai_response(raw)
         assert result.confidence == "low"
+
+
+class TestNormalizeModelName:
+    def test_strips_context_window_suffix(self):
+        assert _normalize_model_name("claude-opus-4-7[1m]") == "claude-opus-4-7"
+
+    def test_no_suffix_unchanged(self):
+        assert _normalize_model_name("claude-opus-4-7") == "claude-opus-4-7"
+
+    def test_strips_other_bracket_variants(self):
+        assert _normalize_model_name("claude-sonnet-4-6[200k]") == "claude-sonnet-4-6"
+
+    def test_strips_trailing_whitespace(self):
+        assert _normalize_model_name("  claude-opus-4-7  ") == "claude-opus-4-7"

@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import re
 from dataclasses import dataclass
 
 from config import AI_PROVIDER, ANTHROPIC_API_KEY, CLAUDE_CLI_PATH, GEMINI_API_KEY
@@ -74,6 +75,12 @@ class FoodAnalysis:
     output_tokens: int = 0
     thinking_tokens: int = 0
     provider: str = ""
+    ai_model: str | None = None
+
+
+def _normalize_model_name(raw: str) -> str:
+    """去除 context window 變體後綴，e.g. 'claude-opus-4-7[1m]' → 'claude-opus-4-7'。"""
+    return re.sub(r"\[.*?\]$", "", raw).strip()
 
 
 def parse_ai_response(raw: str) -> FoodAnalysis:
@@ -315,6 +322,15 @@ async def _analyze_claude_cli(
     result.input_tokens = usage.get("input_tokens", 0) or 0
     result.output_tokens = usage.get("output_tokens", 0) or 0
     result.provider = "claude-cli"
+
+    # 從 modelUsage 取實際使用的模型名稱（稽核用）
+    model_usage = output.get("modelUsage") or {}
+    if model_usage:
+        raw_model = next(iter(model_usage.keys()))
+        result.ai_model = _normalize_model_name(raw_model)
+    else:
+        logger.warning("claude -p 回傳缺少 modelUsage 欄位")
+
     return result
 
 

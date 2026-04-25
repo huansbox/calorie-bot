@@ -69,6 +69,7 @@ tests/
 - **AI fallback 鏈**：Gemini API → claude -p CLI → 錯誤訊息。AI_PROVIDER=claude 時直接走 Claude API（無 fallback）
 - **claude -p CLI**：透過 subprocess 呼叫 VPS 上的 Claude Code CLI，走 Max 訂閱零費用。有圖片時加 `--allowedTools Read`，timeout 60s
 - **ai_provider 追蹤**：meals 表 `ai_provider` 欄位記錄判讀來源（gemini/claude-cli/claude-api/null），週報依 provider 分組計費
+- **ai_model 追蹤**：meals 表 `ai_model` 欄位記錄實際使用的模型名稱（如 `claude-opus-4-7`），目前只在 claude-cli 路徑寫入（從 stdout JSON envelope 的 `modelUsage` 欄位解析），稽核用途。2026-04-09 API key 洩漏事件衍生
 - **Gemini JSON mode**：response_mime_type + response_json_schema 強制合法 JSON 輸出
 - **Claude JSON 容錯**：parse_ai_response 處理 code fence、畸形 JSON (如 `>` 替代 `:`)、confidence 數字→字串轉換
 - **圖片 24 小時過期**：暫存 data/media/，排程清理
