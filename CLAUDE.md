@@ -48,6 +48,7 @@ tests/
   test_food_cache.py # parse_cache_number / is_cache_number 測試 (13 cases)
   test_correction.py # is_meal_type_correction 測試 (5 cases)
   test_report.py     # 週報 helper 測試 (24 cases，每日 map + 4 section)
+docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 ```
 
 ## 開發慣例
