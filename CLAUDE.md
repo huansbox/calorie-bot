@@ -14,7 +14,8 @@
   - claude -p CLI (fallback，走 Max 訂閱零費用，透過 subprocess 呼叫)
   - Claude Sonnet 4.6 API (備選，AI_PROVIDER=claude 時使用)
 - **資料庫**: Supabase (PostgreSQL) — meals（含 ai_provider 欄位）, weight_logs, daily_tdee, food_cache 四張表，全部啟用 RLS，使用 Secret Key 繞過
-- **排程**: APScheduler (AsyncIOScheduler) — 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理
+- **排程**: APScheduler (AsyncIOScheduler) — 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理 + 03:05 COROS TDEE 同步
+- **COROS 整合**: queryDailyHealthData MCP（OAuth + refresh_token rotation）→ 每日自動補 daily_tdee，免手動 /t
 - **密鑰管理**: 1Password — 本機 `op run` + VPS Service Account，`.env` 只存 `op://` 參照
 - **部署**: RackNerd VPS (Ubuntu 24.04, systemd + `op run`)
 
@@ -22,8 +23,8 @@
 
 ```
 main.py              # 進入點，註冊 handlers + 排程，auth_check decorator
-config.py            # 環境變數讀取 (dotenv)，含 BMR 設定
-scheduler.py         # 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理
+config.py            # 環境變數讀取 (dotenv)，含 BMR、COROS_TOKEN_PATH 設定
+scheduler.py         # 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理 + 03:05 COROS TDEE 自動同步
 handlers/
   meal.py            # 食物記錄核心 (文字/照片 → AI 分析 → DB → 回覆)，含 token 追蹤
   weight.py          # /w 體重記錄（含 7 日移動平均）
@@ -39,6 +40,10 @@ services/
   ai.py              # AI 引擎 (Gemini/Claude CLI/Claude API)，SYSTEM_PROMPT，parse_ai_response (有單元測試)
   db.py              # Supabase CRUD (meals, weight_logs, daily_tdee, food_cache)，含體重移動平均
   nutrition.py       # 營養素計算 (三大營養素→熱量) + 格式化 (含百分比)
+  coros_mcp.py       # COROS MCP client：OAuth refresh + queryDailyHealthData + 文字解析（有單元測試）
+scripts/
+  coros_backfill.py       # 手動補登 daily_tdee（MCP 文字檔 or coros-api fallback）
+  coros_mcp_bootstrap.py  # 一次性 OAuth PKCE flow，產生 token 檔
 tests/
   test_ai.py         # parse_ai_response 單元測試 (12 cases，含 confidence 數字轉換)
   test_manual_meal.py # 手動記錄解析函式測試 (28 cases)
@@ -48,6 +53,7 @@ tests/
   test_food_cache.py # parse_cache_number / is_cache_number 測試 (13 cases)
   test_correction.py # is_meal_type_correction 測試 (5 cases)
   test_report.py     # 週報 helper 測試 (24 cases，每日 map + 4 section)
+  test_coros_mcp.py  # MCP parse + token rotation + refresh 流程 (16 cases)
 docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 ```
 
@@ -65,8 +71,10 @@ docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 - **polling 模式** (非 webhook)：簡單、不需公開 URL
 - **auth_check decorator**：單人 Bot，所有 handler 統一用 chat_id 驗證
 - **餐別**：早餐(05:00-10:30)/午餐(11:00-14:30)/晚餐(16:30-21:00)/其他，依台灣時間分鐘級推斷，使用者可用 1-4 覆蓋
-- **TDEE = BMR + 活動消耗**：BMR 固定值存 .env，/t 只需輸入手錶活動消耗
+- **TDEE = BMR + 活動消耗**：BMR 固定值存 .env，活動消耗來自 COROS（自動）或 /t（手動覆寫）
 - **/t 預設記昨天**：符合早上看手錶輸入昨日消耗的使用情境
+- **COROS 自動同步**：每日 03:05 排程拉過去 7 天 daily health → BMR + Calories 寫 daily_tdee。fill-missing-only 不覆寫手動 /t；昨天沒拉到資料會推 Telegram 告警。`Calories` 欄位含 NEAT，與手錶錶面「活動消耗」widget 一致（實測 27 天誤差 ≤ 1 kcal）
+- **COROS token rotation**：refresh_token 每次 refresh 都換新，舊的失效。`services/coros_mcp.py` 用 atomic write (tmp file + rename) 寫回避免半成品。`save → fetch` 順序確保 refresh 成功就先持久化，即使 MCP call 失敗下次仍能用
 - **AI fallback 鏈**：Gemini API → claude -p CLI → 錯誤訊息。AI_PROVIDER=claude 時直接走 Claude API（無 fallback）
 - **claude -p CLI**：透過 subprocess 呼叫 VPS 上的 Claude Code CLI，走 Max 訂閱零費用。有圖片時加 `--allowedTools Read`，timeout 60s
 - **ai_provider 追蹤**：meals 表 `ai_provider` 欄位記錄判讀來源（gemini/claude-cli/claude-api/null），週報依 provider 分組計費
@@ -92,6 +100,7 @@ docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 - AI 校正係數：用體重趨勢反推系統性偏差，套用在非 cache 的 AI 估值上（等資料滿 6-8 週）
 - Web Dashboard
 - 食物資料庫：衛福部 TFDA API、自訂食物別名
+- COROS MCP 增加 sport records / training load 整合，週報加入訓練量視角
 
 ## 部署
 
@@ -100,6 +109,28 @@ VPS 已設定 SSH key 免密碼登入，Claude Code 可直接執行部署：
 ```bash
 ssh root@107.175.30.172 "cd /home/botuser/calorie-bot && sudo -u botuser git pull origin main && sudo systemctl restart calorie-bot"
 ```
+
+### COROS MCP token 部署（首次）
+
+```bash
+# 1. 本機跑 bootstrap，瀏覽器登入授權
+uv run python scripts/coros_mcp_bootstrap.py
+
+# 2. 把 token 透過 root 傳到 VPS，再交給 botuser
+scp data/coros-token.json root@107.175.30.172:/tmp/coros-token.json
+ssh root@107.175.30.172 "mv /tmp/coros-token.json /home/botuser/calorie-bot/data/coros-token.json \
+  && chown botuser:botuser /home/botuser/calorie-bot/data/coros-token.json \
+  && chmod 600 /home/botuser/calorie-bot/data/coros-token.json"
+
+# 3. .env 預設 COROS_TOKEN_PATH 相對於 cwd，systemd unit 的 WorkingDirectory
+#    若不是 /home/botuser/calorie-bot，需在 .env 加絕對路徑
+#    COROS_TOKEN_PATH=/home/botuser/calorie-bot/data/coros-token.json
+
+# 4. restart service，等隔天 03:05 排程觸發
+sudo systemctl restart calorie-bot
+```
+
+token 之後會被 rotation 寫回原檔（atomic rename），botuser 需有該檔與所在目錄的寫權限。
 
 ## VPS 資訊
 

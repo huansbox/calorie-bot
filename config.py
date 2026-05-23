@@ -30,3 +30,4 @@ BMR: int = int(os.getenv("BMR", "1577"))
 PUSH_HOUR: int = int(os.getenv("PUSH_HOUR", "8"))
 DATA_DIR: Path = Path(os.getenv("DATA_DIR", "./data"))
 MEDIA_DIR: Path = DATA_DIR / "media"
+COROS_TOKEN_PATH: Path = Path(os.getenv("COROS_TOKEN_PATH", str(DATA_DIR / "coros-token.json")))

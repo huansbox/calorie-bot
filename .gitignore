@@ -4,4 +4,6 @@ __pycache__/
 .env
 data/media/*
 !data/media/.gitkeep
+data/coros-token.json
+tmp/
 .python-version

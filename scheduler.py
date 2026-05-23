@@ -1,18 +1,21 @@
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import date as date_type, datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram.ext import Application
 
-from config import PUSH_HOUR, TELEGRAM_CHAT_ID, get_calorie_goal
+from config import BMR, COROS_TOKEN_PATH, PUSH_HOUR, TELEGRAM_CHAT_ID, get_calorie_goal
+from services.coros_mcp import CorosMCPError, fetch_and_persist
 from services.nutrition import format_macros
 from services.db import (
     clear_image_path,
     get_expired_images,
     get_meals_by_date,
     get_tdee_by_date,
+    get_tdee_by_week,
     get_weekly_token_usage,
+    upsert_tdee,
 )
 
 logger = logging.getLogger(__name__)
@@ -151,6 +154,58 @@ async def weekly_api_report(app: Application):
     logger.info("Weekly API report sent")
 
 
+async def sync_coros_tdee(app: Application):
+    """每日 03:00 拉 COROS 過去 7 天 daily health → upsert daily_tdee（fill-missing-only）。
+
+    - 7 天視窗：給之前 cron 失敗的日子自動補上機會
+    - fill-missing-only：絕不覆寫已存在的 daily_tdee（你手動 /t 的值優先）
+    - 失敗推 Telegram 告警，請手動 /t
+    """
+    now_tw = datetime.now(TW_TZ)
+    yesterday = (now_tw - timedelta(days=1)).date()
+    start = yesterday - timedelta(days=6)
+
+    try:
+        active_by_date = fetch_and_persist(COROS_TOKEN_PATH, days=8)
+    except CorosMCPError as e:
+        msg = f"⚠️ COROS 拉取失敗\n{e}\n請手動 /t 補昨日"
+        logger.error("COROS sync failed: %s", e)
+        try:
+            await app.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
+        except Exception as send_err:
+            logger.error("Failed to send Telegram alert: %s", send_err)
+        return
+
+    existing_rows = get_tdee_by_week(start, yesterday)
+    existing_dates = {datetime.strptime(r["date"], "%Y-%m-%d").date() for r in existing_rows}
+
+    written: list[tuple[date_type, int]] = []
+    for d in sorted(active_by_date.keys()):
+        if not (start <= d <= yesterday):
+            continue
+        if d in existing_dates:
+            continue
+        tdee = BMR + active_by_date[d]
+        upsert_tdee(tdee, d)
+        written.append((d, tdee))
+        logger.info("COROS sync wrote: %s = %d kcal", d, tdee)
+
+    logger.info(
+        "COROS sync done: wrote %d new (range %s ~ %s, %d already had data)",
+        len(written), start, yesterday, len(existing_dates),
+    )
+
+    # 昨天沒拉到資料 → 告警（手錶可能沒同步上雲）
+    if yesterday not in active_by_date and yesterday not in existing_dates:
+        try:
+            await app.bot.send_message(
+                chat_id=TELEGRAM_CHAT_ID,
+                text=f"⚠️ COROS 未回傳昨日（{yesterday}）資料，請手動 /t 或檢查手錶同步",
+            )
+        except Exception as e:
+            logger.error("Failed to send no-yesterday alert: %s", e)
+
+
 async def cleanup_expired_images(app: Application):
     """清理過期照片檔案並更新 DB。"""
     expired = get_expired_images()
@@ -209,9 +264,18 @@ def setup_scheduler(app: Application) -> AsyncIOScheduler:
         id="cleanup_images",
     )
 
+    scheduler.add_job(
+        sync_coros_tdee,
+        "cron",
+        hour=3,
+        minute=5,
+        args=[app],
+        id="sync_coros_tdee",
+    )
+
     scheduler.start()
     logger.info(
-        "Scheduler started: daily summary at %d:00, API report Mon %d:05, nutrition report Mon %d:10, image cleanup at 03:00",
+        "Scheduler started: daily summary at %d:00, API report Mon %d:05, nutrition report Mon %d:10, image cleanup at 03:00, COROS sync at 03:05",
         PUSH_HOUR,
         PUSH_HOUR,
         PUSH_HOUR,
