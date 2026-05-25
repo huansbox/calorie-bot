@@ -6,6 +6,8 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
+from services.dates import parse_mmdd
+
 if TYPE_CHECKING:
     from telegram import Update
     from telegram.ext import ContextTypes
@@ -60,17 +62,7 @@ def parse_backfill_args(text: str, *, allow_empty_food: bool = False) -> tuple[s
 
     if tokens and re.fullmatch(r"\d{4}", tokens[-1]):
         mmdd = tokens.pop()
-        try:
-            parsed = datetime.strptime(f"2000{mmdd}", "%Y%m%d")
-            candidate = date(now_tw.year, parsed.month, parsed.day)
-        except ValueError:
-            raise ValueError(f"日期格式錯誤：{mmdd}")
-        if candidate >= now_tw.date():
-            try:
-                candidate = date(now_tw.year - 1, parsed.month, parsed.day)
-            except ValueError:
-                raise ValueError(f"日期格式錯誤：{mmdd}")
-        target_date = candidate
+        target_date = parse_mmdd(mmdd, now_tw=now_tw)
 
     # 3) 食物描述
     food_text = " ".join(tokens)
