@@ -11,6 +11,7 @@ from services.db import (
     get_today_meals,
     get_today_tdee,
 )
+from services.format import format_meal_groups
 from services.nutrition import format_macros
 
 logger = logging.getLogger(__name__)
@@ -59,28 +60,13 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total_protein = 0.0
     total_carbs = 0.0
     total_fat = 0.0
-
-    meal_order = ["早餐", "午餐", "晚餐", "其他"]
-    grouped: dict[str, list] = {t: [] for t in meal_order}
     for m in meals:
-        meal_type = m["meal_type"] or "其他"
-        if meal_type not in grouped:
-            grouped[meal_type] = []
-        grouped[meal_type].append(m)
         total_cal += m["calories"] or 0
         total_protein += float(m["protein_g"] or 0)
         total_carbs += float(m["carbs_g"] or 0)
         total_fat += float(m["fat_g"] or 0)
 
-    for mt in meal_order:
-        items = grouped[mt]
-        if not items:
-            continue
-        sub_cal = sum(m["calories"] or 0 for m in items)
-        lines.append("")
-        lines.append(f"【{mt}】{_fmt(sub_cal)} kcal")
-        for m in items:
-            lines.append(f"  {m['description'] or ''}　{_fmt(m['calories'] or 0)} kcal")
+    lines.extend(format_meal_groups(meals))
 
     lines.append("")
     lines.append(f"攝取合計：{_fmt(total_cal)} kcal")

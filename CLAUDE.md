@@ -39,6 +39,8 @@ services/
   ai.py              # AI 引擎 (Gemini/Claude CLI/Claude API)，SYSTEM_PROMPT，parse_ai_response (有單元測試)
   db.py              # Supabase CRUD (meals, weight_logs, daily_tdee, food_cache)，含體重移動平均
   nutrition.py       # 營養素計算 (三大營養素→熱量) + 格式化 (含百分比)
+  dates.py           # MMDD 日期解析 (有單元測試)
+  format.py          # 訊息格式化 helper：餐別分組清單 (有單元測試)
   coros_mcp.py       # COROS MCP client：OAuth refresh + queryDailyHealthData + 文字解析（有單元測試）
 scripts/
   coros_backfill.py       # 手動補登 daily_tdee（MCP 文字檔 or coros-api fallback）
@@ -53,6 +55,8 @@ tests/
   test_correction.py # is_meal_type_correction 測試 (5 cases)
   test_report.py     # 週報 helper 測試 (24 cases，每日 map + 4 section)
   test_coros_mcp.py  # MCP parse + token rotation + refresh 流程 (16 cases)
+  test_dates.py      # parse_mmdd 測試 (8 cases，含退一年邏輯)
+  test_format.py     # format_meal_groups 測試 (8 cases，強制餐別與空 placeholder)
 docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 ```
 
@@ -60,7 +64,7 @@ docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 
 - 所有變更開 feature branch，合併回 main
 - Commit 遵循 Conventional Commits
-- 單元測試涵蓋 services/ai.py、services/nutrition.py、handlers/manual_meal.py、handlers/backfill.py、handlers/food_cache.py (快取編號)、handlers/correction.py (餐別覆蓋)、handlers/report.py (週報 helper) 與 API 費用計算
+- 單元測試涵蓋 services/ai.py、services/nutrition.py、services/dates.py (MMDD 解析)、services/format.py (餐別分組)、handlers/manual_meal.py、handlers/backfill.py、handlers/food_cache.py (快取編號)、handlers/correction.py (餐別覆蓋)、handlers/report.py (週報 helper) 與 API 費用計算
 - Windows 開發環境需設 PYTHONIOENCODING=utf-8
 - 本機啟動: `op run --env-file .env -- python main.py`（需 1Password 桌面 App 解鎖）
 - DB 查詢凡有 ORDER BY，必須包含唯一欄位（如 `id`）作為 tie-breaker，避免同 timestamp 排序不確定

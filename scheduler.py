@@ -7,6 +7,7 @@ from telegram.ext import Application
 
 from config import BMR, COROS_TOKEN_PATH, PUSH_HOUR, TELEGRAM_CHAT_ID
 from services.coros_mcp import CorosMCPError, fetch_and_persist
+from services.format import format_meal_groups
 from services.nutrition import format_macros
 from services.db import (
     clear_image_path,
@@ -51,6 +52,8 @@ async def daily_summary(app: Application):
         *format_macros(total_protein, total_carbs, total_fat),
         f"記錄筆數：{len(meals)} 餐",
     ]
+
+    lines.extend(format_meal_groups(meals, force_meal_types=["早餐", "午餐", "晚餐"]))
 
     tdee_row = get_tdee_by_date(yesterday)
     lines.append("")
