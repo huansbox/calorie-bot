@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from config import get_calorie_goal
 from services.db import get_today_meals, get_today_tdee
 from services.nutrition import format_macros
 
@@ -74,9 +73,6 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append(f"熱量盈餘：+{_fmt(deficit)} kcal")
     else:
         lines.append("今日尚未記錄 TDEE（/t <活動消耗> n）")
-
-    lines.append("")
-    lines.append(f"目標攝取參考：{_fmt(get_calorie_goal())} kcal")
 
     await update.message.reply_text("\n".join(lines))
 

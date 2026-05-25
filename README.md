@@ -18,7 +18,6 @@ Telegram 體重管理 Bot，傳食物照片或文字自動分析營養素並記�
 | `/s` | 查看今日所有記錄與摘要 |
 | `/r` | 上週營養週報 |
 | `/r now` | 本週至今累積 |
-| `/g 1800` | 調整每日熱量目標（重啟回預設） |
 | `/f` | 列出食物快取清單 |
 | `/f 品名 熱量 ...` | 新增食物快取 |
 | `/f 編號 d` | 依編號刪除食物快取 |
@@ -74,7 +73,6 @@ cp .env.example .env
 | `GEMINI_API_KEY` | Google AI Studio 取得 | AI_PROVIDER=gemini 時必填 |
 | `ANTHROPIC_API_KEY` | Anthropic Console 取得 | AI_PROVIDER=claude 時必填 |
 | `CLAUDE_CLI_PATH` | claude CLI 路徑 (預設 /root/.local/bin/claude) | 否 |
-| `DAILY_CALORIE_GOAL` | 每日攝取目標 kcal (預設 2000) | 否 |
 | `BMR` | 基礎代謝率 kcal (預設 1577) | 否 |
 | `PUSH_HOUR` | 每日推播時間 (預設 8) | 否 |
 | `DATA_DIR` | 照片暫存目錄 (預設 ./data) | 否 |

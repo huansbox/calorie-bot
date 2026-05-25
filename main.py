@@ -29,7 +29,6 @@ from handlers.manual_meal import (
 )
 from handlers.food_cache import cmd_food_cache, handle_cache_callback, handle_cache_number, handle_mtype_callback, is_cache_number
 from handlers.backfill import cmd_backfill, handle_backfill_photo
-from handlers.goal import cmd_goal
 from handlers.meal import handle_photo, handle_text
 from handlers.report import cmd_report
 from handlers.tdee import cmd_tdee
@@ -117,11 +116,6 @@ async def _cmd_undo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @auth_check
-async def _cmd_goal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await cmd_goal(update, context)
-
-
-@auth_check
 async def _cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await cmd_report(update, context)
 
@@ -177,7 +171,6 @@ async def _cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/b [1-4] 食物 [MMDD] — 補記（預設昨天）",
         "/f — 食物快取清單",
         "/r — 上週週報 | /r now 本週至今",
-        "/g 熱量 — 調整每日目標",
         "/u — 撤銷上一筆",
         "/h — 本說明",
         "",
@@ -218,7 +211,6 @@ def main():
     app.add_handler(CommandHandler("t", _cmd_tdee))
     app.add_handler(CommandHandler("s", _cmd_today))
     app.add_handler(CommandHandler("u", _cmd_undo))
-    app.add_handler(CommandHandler("g", _cmd_goal))
     app.add_handler(CommandHandler("r", _cmd_report))
     app.add_handler(CommandHandler("f", _cmd_food_cache))
     app.add_handler(CommandHandler("b", _cmd_backfill))

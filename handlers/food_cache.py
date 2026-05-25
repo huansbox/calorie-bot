@@ -4,7 +4,6 @@ import re
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from config import get_calorie_goal
 from handlers.manual_meal import _apply_multiplier, parse_at_input
 from handlers.meal import _infer_meal_type, _format_number
 from services.db import (
@@ -99,7 +98,7 @@ async def handle_cache_number(update: Update, context: ContextTypes.DEFAULT_TYPE
         *format_macros(values["protein_g"], values["carbs_g"], values["fat_g"]),
         f"餐別：{meal_type}",
         "",
-        f"今日累計：{_format_number(total_cal)} / {_format_number(get_calorie_goal())} kcal",
+        f"今日累計：{_format_number(total_cal)} kcal",
     ]
 
     cache_buttons = InlineKeyboardMarkup([

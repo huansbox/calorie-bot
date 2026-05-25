@@ -165,7 +165,6 @@ async def _process_backfill_cache(
     """快取編號補記：略過 AI，直接用 food_cache 的值寫入指定日期。"""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-    from config import get_calorie_goal
     from handlers.manual_meal import _apply_multiplier
     from services.db import get_cache_by_index, get_meals_by_date, insert_meal
     from services.nutrition import format_macros
@@ -208,7 +207,7 @@ async def _process_backfill_cache(
         *format_macros(values["protein_g"], values["carbs_g"], values["fat_g"]),
         f"餐別：{meal_type}",
         "",
-        f"{date_str} 累計：{_format_number(total_cal)} / {_format_number(get_calorie_goal())} kcal",
+        f"{date_str} 累計：{_format_number(total_cal)} kcal",
     ]
 
     buttons = InlineKeyboardMarkup([
@@ -231,7 +230,7 @@ async def _process_backfill(
     image_path: str | None = None,
 ):
     """補記的共用流程：AI 分析 → DB → 回覆。"""
-    from config import MEDIA_DIR, get_calorie_goal
+    from config import MEDIA_DIR
     from services.ai import analyze_food
     from services.db import get_meals_by_date, insert_meal
     from services.nutrition import format_macros
@@ -284,7 +283,7 @@ async def _process_backfill(
         *format_macros(result.protein_g, result.carbs_g, result.fat_g),
         f"餐別：{meal_type}",
         "",
-        f"{date_str} 累計：{_format_number(total_cal)} / {_format_number(get_calorie_goal())} kcal",
+        f"{date_str} 累計：{_format_number(total_cal)} kcal",
     ]
 
     if result.confidence == "low":

@@ -131,7 +131,6 @@ def _apply_multiplier(data: dict, multiplier: float) -> dict:
 
 async def handle_manual_meal(update: Update, context: ContextTypes.DEFAULT_TYPE, data: dict):
     """共用的手動記錄流程：儲存 → 回覆。"""
-    from config import get_calorie_goal
     from handlers.meal import _infer_meal_type, _format_number
     from services.db import get_today_meals, insert_meal
     from handlers.food_cache import make_meal_buttons
@@ -162,7 +161,7 @@ async def handle_manual_meal(update: Update, context: ContextTypes.DEFAULT_TYPE,
         *format_macros(data['protein_g'], data['carbs_g'], data['fat_g']),
         f"餐別：{meal_type}",
         "",
-        f"今日累計：{_format_number(total_cal)} / {_format_number(get_calorie_goal())} kcal",
+        f"今日累計：{_format_number(total_cal)} kcal",
     ]
 
     msg = await update.message.reply_text(

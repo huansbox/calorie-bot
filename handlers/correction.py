@@ -59,7 +59,6 @@ async def handle_correct_callback(update: Update, context: ContextTypes.DEFAULT_
 
 async def handle_correction_input(update: Update, context: ContextTypes.DEFAULT_TYPE, meal_id: str):
     """處理修正模式的文字輸入：解析並更新記錄。"""
-    from config import get_calorie_goal
     from handlers.manual_meal import parse_at_input
     from handlers.meal import _format_number
     from services.nutrition import format_macros
@@ -101,7 +100,7 @@ async def handle_correction_input(update: Update, context: ContextTypes.DEFAULT_
         f"熱量：{_format_number(data['calories'])} kcal",
         *format_macros(data["protein_g"], data["carbs_g"], data["fat_g"]),
         "",
-        f"今日累計：{_format_number(total_cal)} / {_format_number(get_calorie_goal())} kcal",
+        f"今日累計：{_format_number(total_cal)} kcal",
     ]
     if is_backfill:
         lines.append(f"（此筆為 {recorded_date.strftime('%m/%d')} 的補記，累計仍顯示今日）")
