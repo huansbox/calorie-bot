@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from config import BMR
 from services.dates import parse_mmdd
 from services.db import (
     get_meals_by_date,
@@ -75,8 +76,10 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append("")
     if tdee_row:
         tdee = tdee_row["tdee_kcal"]
+        active = tdee - BMR
         deficit = total_cal - tdee
         lines.append(f"總消耗（TDEE）：{_fmt(tdee)} kcal")
+        lines.append(f"　 BMR {_fmt(BMR)} + 活動 {_fmt(active)}")
         if deficit <= 0:
             lines.append(f"熱量缺口：{_fmt(deficit)} kcal")
         else:

@@ -59,8 +59,10 @@ async def daily_summary(app: Application):
     lines.append("")
     if tdee_row:
         tdee = tdee_row["tdee_kcal"]
+        active = tdee - BMR
         deficit = total_cal - tdee
         lines.append(f"總消耗（TDEE）：{_fmt(tdee)} kcal")
+        lines.append(f"　 BMR {_fmt(BMR)} + 活動 {_fmt(active)}")
         if deficit <= 0:
             lines.append(f"熱量缺口：{_fmt(deficit)} kcal ✅")
         else:

@@ -167,7 +167,7 @@ async def _cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "【指令】",
         "/s — 今日摘要",
         "/w 體重 — 記錄體重",
-        "/t 消耗 [n] — TDEE（預設昨天，加 n 今天）",
+        "/t 消耗 [n] — 手動覆寫 TDEE（COROS 每日 03:05 自動同步，/t 用於手錶沒同步時補登）",
         "/b [1-4] 食物 [MMDD] — 補記（預設昨天）",
         "/f — 食物快取清單",
         "/r — 上週週報 | /r now 本週至今",
