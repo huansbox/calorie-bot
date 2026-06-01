@@ -104,7 +104,7 @@ docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 
 ## 待驗（COROS 體重同步，2026-06-01 上線）
 
-功能已部署 prod 且通過唯讀驗證（`queryUserInfo → parse = 71.0`），但**首次自動「寫入」要等有「當天還沒筆」的日子**——最快 2026-06-02 10:29（6/01 已有筆，當天只會 SKIP）。下次 session 撈 VPS log 補確認：
+功能已部署 prod 且通過唯讀驗證（`queryUserInfo → parse = 71.0`）。排程時點皆**台灣時間**（scheduler `timezone="Asia/Taipei"`；VPS 系統時鐘是 UTC，差 8 小時）。部署在 6/01 台灣 18:15 完成，已晚於當天 10:29，故**新 job 首次實跑是 6/01 台灣 22:29（= 14:29 UTC）→ 預期 SKIP**（6/01 已有筆）。**首次實際「寫入」最快 2026-06-02 台灣 10:29**（若當天還沒筆）。下次 session 撈 VPS log 補確認：
 
 - `journalctl -u calorie-bot | grep "COROS weight sync"`：確認 6/02 10:29 出現 `... -> WRITE_SILENT` 且 weight_logs 有當日 `source='coros'` 筆（issues/005、006）
 - 6/02 08:00 昨日摘要實際出現「⚖️ 最新體重 X kg（日期，7日均線）」行且格式正確（issues/008）
