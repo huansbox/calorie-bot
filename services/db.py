@@ -254,6 +254,12 @@ def get_latest_weight_before(log_date: date) -> dict | None:
     return result.data[0] if result.data else None
 
 
+# 以下體重查詢用 recorded_at DESC 排序（而非 log_date）是刻意且正確的：weight_logs
+# 一天一筆，且每筆寫入都發生在自己 log_date 當天、無體重 backfill 路徑，故 recorded_at
+# 恆落在自己 log_date 內 → recorded_at 排序與 log_date 排序等價（2026-06-01 prod 實測
+# 41 筆 0 mismatch）。看似可改 log_date，但現況正確、改動會波及 /w、週報、均線共用，故不動。
+# （唯一以 log_date 比較的是 get_latest_weight_before：它要排除「今天」，語意上必須用 log_date。）
+
 def get_last_weight() -> dict | None:
     """取得最近一筆體重記錄。"""
     result = (
