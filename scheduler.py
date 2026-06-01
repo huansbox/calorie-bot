@@ -46,6 +46,8 @@ async def daily_summary(app: Application):
     meals = get_meals_by_date(yesterday)
 
     if not meals:
+        # 已知取捨：無餐日整個摘要不推，連下方的最新體重行也一併略過。
+        # 使用者幾乎天天記食物，無餐日近乎不存在，故接受此 gap（US15 的「每天」）。
         logger.info("No meals yesterday, skipping daily summary")
         return
 
