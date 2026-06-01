@@ -24,6 +24,7 @@ from services.db import (
     get_tdee_by_date,
     get_tdee_by_week,
     get_weekly_token_usage,
+    get_weight_moving_avg,
     today_has_weight_row,
     upsert_tdee,
     upsert_weight,
@@ -79,6 +80,22 @@ async def daily_summary(app: Application):
             lines.append(f"熱量盈餘：+{_fmt(deficit)} kcal")
     else:
         lines.append("昨日未記錄 TDEE（/t <活動消耗>）")
+
+    # 最新體重：帶 log_date 讓你看出是不是今天的（08:00 時當日同步尚未跑，顯示的
+    # 必為昨日或更早），也看得出是否久未量測。無資料時優雅省略。
+    last_w = get_last_weight()
+    if last_w:
+        w_kg = float(last_w["weight_kg"])
+        w_date = date_type.fromisoformat(last_w["log_date"])
+        w_date_str = (
+            w_date.strftime("%-m/%-d") if os.name != "nt" else w_date.strftime("%#m/%#d")
+        )
+        avg = get_weight_moving_avg(7)
+        lines.append("")
+        if avg:
+            lines.append(f"⚖️ 最新體重：{w_kg} kg（{w_date_str}，7日均線 {avg:.1f}）")
+        else:
+            lines.append(f"⚖️ 最新體重：{w_kg} kg（{w_date_str}）")
 
     await app.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text="\n".join(lines))
     logger.info("Daily summary sent")
