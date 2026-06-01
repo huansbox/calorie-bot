@@ -13,9 +13,9 @@
   - Gemini 2.5 Pro (預設，JSON mode 強制合法輸出)
   - claude -p CLI (fallback，走 Max 訂閱零費用，透過 subprocess 呼叫)
   - Claude Sonnet 4.6 API (備選，AI_PROVIDER=claude 時使用)
-- **資料庫**: Supabase (PostgreSQL) — meals（含 ai_provider 欄位）, weight_logs, daily_tdee, food_cache 四張表，全部啟用 RLS，使用 Secret Key 繞過
-- **排程**: APScheduler (AsyncIOScheduler) — 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理 + 03:05 COROS TDEE 同步
-- **COROS 整合**: queryDailyHealthData MCP（OAuth + refresh_token rotation）→ 每日自動補 daily_tdee，免手動 /t
+- **資料庫**: Supabase (PostgreSQL) — meals（含 ai_provider 欄位）, weight_logs（log_date UNIQUE + source，一天一筆）, daily_tdee, food_cache 四張表，全部啟用 RLS，使用 Secret Key 繞過
+- **排程**: APScheduler (AsyncIOScheduler) — 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理 + 03:05 COROS TDEE 同步 + 10:29/22:29 COROS 體重同步
+- **COROS 整合**: queryDailyHealthData → 每日自動補 daily_tdee（免手動 /t）；queryUserInfo → 每日自動補體重（免手動 /w）。同一條 MCP 管線（OAuth + refresh_token rotation）
 - **密鑰管理**: 1Password — 本機 `op run` + VPS Service Account，`.env` 只存 `op://` 參照
 - **部署**: RackNerd VPS (Ubuntu 24.04, systemd + `op run`)
 
@@ -24,10 +24,10 @@
 ```
 main.py              # 進入點，註冊 handlers + 排程，auth_check decorator
 config.py            # 環境變數讀取 (dotenv)，含 BMR、COROS_TOKEN_PATH 設定
-scheduler.py         # 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理 + 03:05 COROS TDEE 自動同步
+scheduler.py         # 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理 + 03:05 COROS TDEE 同步 + 10:29/22:29 COROS 體重同步
 handlers/
   meal.py            # 食物記錄核心 (文字/照片 → AI 分析 → DB → 回覆)，含 token 追蹤
-  weight.py          # /w 體重記錄（含 7 日移動平均）
+  weight.py          # /w 體重記錄（upsert on log_date，一天一筆覆蓋；含 7 日移動平均）
   tdee.py            # /t 每日消耗記錄（預設昨天，加 n 記今天，自動加 BMR）
   query.py           # /s 今日摘要
   correction.py      # 餐別覆蓋 (1-4) + /u 撤銷 + 「修正」按鈕手動修正營養素
@@ -37,14 +37,17 @@ handlers/
   backfill.py        # /b 補記過去日期的食物（預設昨天，支援 MMDD 日期 + 1-4 餐別）
 services/
   ai.py              # AI 引擎 (Gemini/Claude CLI/Claude API)，SYSTEM_PROMPT，parse_ai_response (有單元測試)
-  db.py              # Supabase CRUD (meals, weight_logs, daily_tdee, food_cache)，含體重移動平均
+  db.py              # Supabase CRUD (meals, weight_logs, daily_tdee, food_cache)，含體重 upsert on log_date + 移動平均
   nutrition.py       # 營養素計算 (三大營養素→熱量) + 格式化 (含百分比)
   dates.py           # MMDD 日期解析 (有單元測試)
   format.py          # 訊息格式化 helper：餐別分組清單 (有單元測試)
-  coros_mcp.py       # COROS MCP client：OAuth refresh + queryDailyHealthData + 文字解析（有單元測試）
+  coros_mcp.py       # COROS MCP client：OAuth refresh + queryDailyHealthData + queryUserInfo + 文字解析（有單元測試）
+  weight_sync.py     # decide_weight_sync 純函式：體重同步決策真值表（無 I/O，有單元測試）
 scripts/
   coros_backfill.py       # 手動補登 daily_tdee（MCP 文字檔 or coros-api fallback）
   coros_mcp_bootstrap.py  # 一次性 OAuth PKCE flow，產生 token 檔
+  check_weight_logs.py    # 一次性：檢查 weight_logs 同日多筆（migration 前的盤點）
+  migrate_weight_logs_log_date.sql  # forward-only：weight_logs 加 log_date+source、壓一天一筆、建 UNIQUE（已對 prod 執行）
 tests/
   test_ai.py         # parse_ai_response 單元測試 (12 cases，含 confidence 數字轉換)
   test_manual_meal.py # 手動記錄解析函式測試 (28 cases)
@@ -54,7 +57,8 @@ tests/
   test_food_cache.py # parse_cache_number / is_cache_number 測試 (13 cases)
   test_correction.py # is_meal_type_correction 測試 (5 cases)
   test_report.py     # 週報 helper 測試 (24 cases，每日 map + 4 section)
-  test_coros_mcp.py  # MCP parse + token rotation + refresh 流程 (16 cases)
+  test_coros_mcp.py  # MCP parse (daily health + user weight) + token rotation + refresh 流程 (26 cases)
+  test_weight_sync.py # decide_weight_sync 真值表 + 閾值邊界測試 (14 cases)
   test_dates.py      # parse_mmdd 測試 (8 cases，含退一年邏輯)
   test_format.py     # format_meal_groups 測試 (8 cases，強制餐別與空 placeholder)
 docs/                # 設計探索文件（如 cli-model-tracking-design.md）
@@ -78,6 +82,8 @@ docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 - **/t 預設記昨天**：符合早上看手錶輸入昨日消耗的使用情境
 - **COROS 自動同步**：每日 03:05 排程拉過去 7 天 daily health → BMR + Calories 寫 daily_tdee。fill-missing-only 不覆寫手動 /t；昨天沒拉到資料會推 Telegram 告警。`Calories` 欄位含 NEAT，與手錶錶面「活動消耗」widget 一致（實測 27 天誤差 ≤ 1 kcal）
 - **COROS token rotation**：refresh_token 每次 refresh 都換新，舊的失效。`services/coros_mcp.py` 用 atomic write (tmp file + rename) 寫回避免半成品。`save → fetch` 順序確保 refresh 成功就先持久化，即使 MCP call 失敗下次仍能用
+- **COROS 體重自動同步**：每日 10:29（主）+ 22:29（fallback）`queryUserInfo` 抓 profile 當前體重 → `decide_weight_sync` 純函式決策 → upsert `weight_logs`。**走「日期路線」**：profile 體重無時間戳，無法區分「同重」與「沒量」，故只要當天沒筆就寫（接受偶爾寫沿用舊值的假點，換零紀律），`/w` 是假點修正出口。fill-missing-only（當天已有筆→SKIP，故 fallback 自動成立、晨重優先）。決策真值表：當天有筆→SKIP；抓不到→告警不寫；無基準→寫；跳變 >3kg（含離譜壞值）→告警不寫；值同上次→寫+輕提醒；正常→靜默寫。**token 不自己 refresh**，沿用 03:05 `sync_coros_tdee` rotate 過的 access_token（US22，rotation 風險集中單一時點）
+- **體重一天一筆**：`weight_logs.log_date`(date) UNIQUE，所有寫入 upsert on log_date（比照 daily_tdee）。手動 /w（`source='manual'`）永遠覆蓋當天，自動同步（`source='coros'`）只在沒筆時寫，故手動永遠優先、無需特判。`source` 純內部驅動覆蓋邏輯，不出現在任何訊息
 - **AI fallback 鏈**：Gemini API → claude -p CLI → 錯誤訊息。AI_PROVIDER=claude 時直接走 Claude API（無 fallback）
 - **claude -p CLI**：透過 subprocess 呼叫 VPS 上的 Claude Code CLI，走 Max 訂閱零費用。有圖片時加 `--allowedTools Read`，timeout 60s
 - **ai_provider 追蹤**：meals 表 `ai_provider` 欄位記錄判讀來源（gemini/claude-cli/claude-api/null），週報依 provider 分組計費
@@ -93,7 +99,7 @@ docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 - **食物快取**：常吃食物存 food_cache 表，記錄完成後 Inline Button 一鍵加入，/f 列出清單，輸入編號 11-99 直接記錄（可加 x 倍數如 `11 x2`）
 - **數字路由**：1-4 餐別覆蓋、11-99 快取記錄，不衝突
 - **週報**：/r 上週、/r now 本週至今，六區塊（每日收支、營養素結構、正餐比例、累積收支、體重預估vs實際+7日均線、週對週），未記錄 TDEE 的天數用 BMR 補位（標 *）
-- **體重 7 日移動平均**：/w 記錄後顯示均線，週報體重區段也顯示。取最近 7 筆，不足 3 筆不顯示。用於壓平量測時機造成的 1-2 kg 日間波動
+- **體重 7 日移動平均**：/w 記錄後顯示均線，週報體重區段與 08:00 昨日摘要也顯示。一天一筆後「最近 7 筆」即「最近 7 天」。取最近 7 筆，不足 3 筆不顯示。用於壓平量測時機造成的 1-2 kg 日間波動
 - **補記 /b**：預設昨天（比照 /t），MMDD 4位數指定日期（今天或未來自動退回上一年），可選 1-4 餐別（預設其他）。recorded_at 設為台灣正午 12:00 轉 UTC，確保落在 get_meals_by_date 查詢區間內。照片 caption 支援純餐別/日期（allow_empty_food）。食物描述若為快取編號（11-99，可加 x 倍數）則走 cache 路徑免 AI。已知限制：修正補記餐點後累計顯示今天而非補記日（已加註記提示）
 
 ## 未來想做
