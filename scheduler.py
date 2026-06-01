@@ -6,17 +6,27 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram.ext import Application
 
 from config import BMR, COROS_TOKEN_PATH, PUSH_HOUR, TELEGRAM_CHAT_ID
-from services.coros_mcp import CorosMCPError, fetch_and_persist
+from services.coros_mcp import (
+    CorosMCPError,
+    fetch_and_persist,
+    fetch_user_info,
+    load_token,
+    parse_user_weight,
+)
 from services.format import format_meal_groups
 from services.nutrition import format_macros
+from services.weight_sync import decide_weight_sync
 from services.db import (
     clear_image_path,
     get_expired_images,
+    get_last_weight,
     get_meals_by_date,
     get_tdee_by_date,
     get_tdee_by_week,
     get_weekly_token_usage,
+    today_has_weight_row,
     upsert_tdee,
+    upsert_weight,
 )
 
 logger = logging.getLogger(__name__)
@@ -211,6 +221,38 @@ async def sync_coros_tdee(app: Application):
             logger.error("Failed to send no-yesterday alert: %s", e)
 
 
+async def sync_coros_weight(app: Application):
+    """每日 10:29 從 COROS profile 抓當前體重 → 決策 → upsert（fill-missing-only）。
+
+    - token 沿用 03:05 sync_coros_tdee refresh 過的 access_token：本 job 走
+      load_token → fetch_user_info，**不自己 refresh**（PRD US22，把 rotation
+      風險集中在單一每日時點）。
+    - 抓取 / 解析失敗一律當 fetched=None，交給 decide_weight_sync 走告警分支。
+    - 決策由純函式 decide_weight_sync 負責；本 job 只依 should_write 寫入。
+      告警 / 提醒的 Telegram 發送見 issues/006。
+    """
+    try:
+        token = load_token(COROS_TOKEN_PATH)
+        text = fetch_user_info(token)
+        fetched = parse_user_weight(text)
+    except Exception as e:  # 任何抓取 / 解析失敗 → 走 ALERT_NO_WRITE 分支
+        logger.error("COROS weight sync fetch failed: %s", e)
+        fetched = None
+
+    last = get_last_weight()
+    last_weight = float(last["weight_kg"]) if last else None
+    today_has_row = today_has_weight_row()
+
+    decision = decide_weight_sync(fetched, last_weight, today_has_row)
+    logger.info(
+        "COROS weight sync: fetched=%s last=%s today_has_row=%s -> %s",
+        fetched, last_weight, today_has_row, decision.action,
+    )
+
+    if decision.should_write:
+        upsert_weight(fetched, source="coros")
+
+
 async def cleanup_expired_images(app: Application):
     """清理過期照片檔案並更新 DB。"""
     expired = get_expired_images()
@@ -276,6 +318,15 @@ def setup_scheduler(app: Application) -> AsyncIOScheduler:
         minute=5,
         args=[app],
         id="sync_coros_tdee",
+    )
+
+    scheduler.add_job(
+        sync_coros_weight,
+        "cron",
+        hour=10,
+        minute=29,
+        args=[app],
+        id="sync_coros_weight",
     )
 
     scheduler.start()
