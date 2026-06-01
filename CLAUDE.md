@@ -102,6 +102,16 @@ docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 - **體重 7 日移動平均**：/w 記錄後顯示均線，週報體重區段與 08:00 昨日摘要也顯示。一天一筆後「最近 7 筆」即「最近 7 天」。取最近 7 筆，不足 3 筆不顯示。用於壓平量測時機造成的 1-2 kg 日間波動
 - **補記 /b**：預設昨天（比照 /t），MMDD 4位數指定日期（今天或未來自動退回上一年），可選 1-4 餐別（預設其他）。recorded_at 設為台灣正午 12:00 轉 UTC，確保落在 get_meals_by_date 查詢區間內。照片 caption 支援純餐別/日期（allow_empty_food）。食物描述若為快取編號（11-99，可加 x 倍數）則走 cache 路徑免 AI。已知限制：修正補記餐點後累計顯示今天而非補記日（已加註記提示）
 
+## 待驗（COROS 體重同步，2026-06-01 上線）
+
+功能已部署 prod 且通過唯讀驗證（`queryUserInfo → parse = 71.0`），但**首次自動「寫入」要等有「當天還沒筆」的日子**——最快 2026-06-02 10:29（6/01 已有筆，當天只會 SKIP）。下次 session 撈 VPS log 補確認：
+
+- `journalctl -u calorie-bot | grep "COROS weight sync"`：確認 6/02 10:29 出現 `... -> WRITE_SILENT` 且 weight_logs 有當日 `source='coros'` 筆（issues/005、006）
+- 6/02 08:00 昨日摘要實際出現「⚖️ 最新體重 X kg（日期，7日均線）」行且格式正確（issues/008）
+- 當天有 coros 自動筆後打一次 `/w`，確認 upsert 覆蓋成 manual（issues/007 的端到端）
+- 值同上次的輕提醒 / 跳變 >3kg 告警，待實際觸發時觀察（issues/006）
+- `/w` 寫入路徑本身（NOT NULL 修復）也建議用一次真實量測確認
+
 ## 未來想做
 
 - 月報統計（等資料滿 2 個月）

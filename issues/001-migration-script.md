@@ -16,12 +16,12 @@
 
 ## Acceptance criteria
 
-- [ ] 加上 `log_date`(date)、`source`(text) 兩欄
-- [ ] 回填 `source='manual'`，`log_date` 由 `recorded_at` 以 UTC+8 換算
-- [ ] 3/13 衝突處理寫成「先 SELECT 兩筆、再 DELETE 午夜筆」，不盲刪寫死 id；結果保留 71.2、刪 72.3
-- [ ] 建立 `log_date` UNIQUE 約束的語句在「壓成一天一筆」之後
-- [ ] 附驗證查詢：可確認 41 筆、每台灣日期恰一筆、UNIQUE 生效
-- [ ] 腳本含註解說明 3/13 id 來源，可供審查，但不在本 issue 對 production 執行
+- [x] 加上 `log_date`(date)、`source`(text) 兩欄
+- [x] 回填 `source='manual'`，`log_date` 由 `recorded_at` 以 UTC+8 換算
+- [x] 3/13 衝突處理寫成「先 SELECT 兩筆、再 DELETE 午夜筆」，不盲刪寫死 id；結果保留 71.2、刪 72.3
+- [x] 建立 `log_date` UNIQUE 約束的語句在「壓成一天一筆」之後
+- [x] 附驗證查詢：可確認 41 筆、每台灣日期恰一筆、UNIQUE 生效
+- [x] 腳本含註解說明 3/13 id 來源，可供審查，但不在本 issue 對 production 執行
 
 ## Blocked by
 

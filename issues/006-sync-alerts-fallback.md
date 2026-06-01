@@ -13,12 +13,12 @@
 
 ## Acceptance criteria
 
-- [ ] ALERT_NO_WRITE → 推 Telegram 告警，內容提示 `/w` 確認；不寫入
-- [ ] WRITE+ALERT → 寫入 + 推輕提醒「與上次相同，若還沒量請 `/w`」
-- [ ] 抓取 / 解析失敗 → 走告警路徑（US 14）
-- [ ] 22:29 fallback 時點掛上，與 10:29 共用邏輯
-- [ ] 驗證：早上已寫，22:29 SKIP（不重複、不覆蓋）→ 晨重優先成立
-- [ ] 確認整條同步未呼叫 refresh（token 沿用 03:05）
+- [x] ALERT_NO_WRITE → 推 Telegram 告警，內容提示 `/w` 確認；不寫入
+- [x] WRITE+ALERT → 寫入 + 推輕提醒「與上次相同，若還沒量請 `/w`」
+- [x] 抓取 / 解析失敗 → 走告警路徑（US 14）
+- [x] 22:29 fallback 時點掛上，與 10:29 共用邏輯
+- [ ] 驗證：早上已寫，22:29 SKIP（不重複、不覆蓋）→ 晨重優先成立 ⏳ 待 6/02 首次自動寫入觀察（見 CLAUDE.md 待辦）
+- [x] 確認整條同步未呼叫 refresh（token 沿用 03:05）
 
 ## Blocked by
 

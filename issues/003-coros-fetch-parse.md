@@ -28,11 +28,11 @@ parser 依此格式撰寫；部署後第一天看 VPS log 確認與 production t
 
 ## Acceptance criteria
 
-- [ ] `fetch_user_info` 呼叫 `queryUserInfo`，沿用 `_mcp_call` 既有 initialize→notified→tools/call 流程
-- [ ] 抓取路徑只 `load_token → fetch`，**不呼叫 refresh、不複用 `fetch_and_persist`**
-- [ ] `parse_user_weight` 從上述格式正確解出 `70.7`（float）
-- [ ] `parse_user_weight` 對缺 Weight 欄位、空字串、格式異常回 None
-- [ ] 單元測試涵蓋：正常、整數值、不同小數、缺欄位、空字串（比照 `tests/test_coros_mcp.py` 的 parse 真值表風格）
+- [x] `fetch_user_info` 呼叫 `queryUserInfo`，沿用 `_mcp_call` 既有 initialize→notified→tools/call 流程
+- [x] 抓取路徑只 `load_token → fetch`，**不呼叫 refresh、不複用 `fetch_and_persist`**
+- [x] `parse_user_weight` 從上述格式正確解出 `70.7`（float）
+- [x] `parse_user_weight` 對缺 Weight 欄位、空字串、格式異常回 None
+- [x] 單元測試涵蓋：正常、整數值、不同小數、缺欄位、空字串（比照 `tests/test_coros_mcp.py` 的 parse 真值表風格）
 
 ## Blocked by
 

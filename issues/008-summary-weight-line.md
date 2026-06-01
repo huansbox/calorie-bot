@@ -11,11 +11,11 @@
 
 ## Acceptance criteria
 
-- [ ] 08:00 摘要含一行最新體重 + 該筆 log_date + 7 日均線
-- [ ] 體重取最近一筆（含其 log_date）
-- [ ] 均線沿用既有 `get_weight_moving_avg`（不足 3 筆時的處理比照現有）
-- [ ] 無體重資料時不出錯（優雅省略該行）
-- [ ] source 不出現在摘要
+- [x] 08:00 摘要含一行最新體重 + 該筆 log_date + 7 日均線
+- [x] 體重取最近一筆（含其 log_date）
+- [x] 均線沿用既有 `get_weight_moving_avg`（不足 3 筆時的處理比照現有）
+- [x] 無體重資料時不出錯（優雅省略該行）
+- [x] source 不出現在摘要
 
 ## Blocked by
 

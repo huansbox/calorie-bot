@@ -14,12 +14,12 @@
 
 ## Acceptance criteria
 
-- [ ] `db.py` 有 upsert on `log_date`、取最近筆、今日是否有筆三個能力
-- [ ] `sync_coros_weight` 串起抓取→parse→決策→寫入，掛 10:29
-- [ ] WRITE_SILENT 路徑：當天無筆 → 寫入一筆 `source='coros'`
-- [ ] SKIP 路徑：當天已有筆 → 不寫、不報錯
-- [ ] token 沿用既有 access_token，函式內**不呼叫 refresh**
-- [ ] 手動觸發可驗證端到端寫入（log 或 DB 查得到今日 coros 筆）
+- [x] `db.py` 有 upsert on `log_date`、取最近筆、今日是否有筆三個能力
+- [x] `sync_coros_weight` 串起抓取→parse→決策→寫入，掛 10:29
+- [ ] WRITE_SILENT 路徑：當天無筆 → 寫入一筆 `source='coros'` ⏳ 待 6/02 首次自動寫入觀察（見 CLAUDE.md 待辦）
+- [ ] SKIP 路徑：當天已有筆 → 不寫、不報錯 ⏳ 待 10:29/22:29 排程 log 確認
+- [x] token 沿用既有 access_token，函式內**不呼叫 refresh**
+- [ ] 手動觸發可驗證端到端寫入（log 或 DB 查得到今日 coros 筆）⏳ 待 6/02 首次自動寫入觀察（見 CLAUDE.md 待辦）
 
 ## Blocked by
 

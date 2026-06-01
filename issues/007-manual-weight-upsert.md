@@ -14,12 +14,12 @@
 
 ## Acceptance criteria
 
-- [ ] `/w` 改 upsert on `log_date`，寫 `source='manual'`
-- [ ] 當天已有 coros 自動筆 → `/w` 覆蓋成 manual 值（手動優先）
-- [ ] 同一天重複 `/w` → 以最後一次為準（覆蓋，不新增 row）
-- [ ] 移除 weight.py 冗餘的 prev 雙重計算
-- [ ] 驗證「上次 / 變化」顯示在 upsert 模型下正確（同日改兩次時 prev 指向前一天而非自己）
-- [ ] source 不出現在 `/w` 回覆訊息
+- [x] `/w` 改 upsert on `log_date`，寫 `source='manual'`
+- [ ] 當天已有 coros 自動筆 → `/w` 覆蓋成 manual 值（手動優先）⏳ 待 6/02 有 coros 自動筆後驗（見 CLAUDE.md 待辦）
+- [x] 同一天重複 `/w` → 以最後一次為準（覆蓋，不新增 row）
+- [x] 移除 weight.py 冗餘的 prev 雙重計算
+- [x] 驗證「上次 / 變化」顯示在 upsert 模型下正確（同日改兩次時 prev 指向前一天而非自己）
+- [x] source 不出現在 `/w` 回覆訊息
 
 ## Blocked by
 
