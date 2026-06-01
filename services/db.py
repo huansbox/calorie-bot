@@ -188,11 +188,70 @@ def delete_meal(meal_id: str) -> None:
 
 # ── Weight Logs ────────────────────────────────────────
 
-def insert_weight(weight_kg: float) -> dict:
-    """新增體重記錄。"""
-    result = supabase.table("weight_logs").insert({"weight_kg": weight_kg}).execute()
-    logger.info("Inserted weight: %s kg", weight_kg)
+def upsert_weight(
+    weight_kg: float,
+    log_date: date | None = None,
+    source: str = "manual",
+) -> dict:
+    """新增或更新某日體重（log_date 欄位 UNIQUE，故用 upsert，比照 upsert_tdee）。
+
+    log_date 預設今天台灣日期。source 為 'manual'（/w）或 'coros'（自動同步）。
+    同一 log_date 重複寫入 → 覆蓋既有筆（不新增 row）：手動 /w 永遠蓋掉當天既有筆，
+    自動同步只在當天沒筆時才呼叫（由呼叫端的 today_has_weight_row 把關）。
+    recorded_at 不在 payload：insert 時用 default now()，update 時保留原值。
+    """
+    if log_date is None:
+        from datetime import timedelta
+
+        now_tw = datetime.now(timezone.utc) + timedelta(hours=8)
+        log_date = now_tw.date()
+
+    row = {
+        "weight_kg": weight_kg,
+        "log_date": log_date.isoformat(),
+        "source": source,
+    }
+    result = (
+        supabase.table("weight_logs")
+        .upsert(row, on_conflict="log_date")
+        .execute()
+    )
+    logger.info("Upserted weight: %s kg for %s (%s)", weight_kg, log_date, source)
     return result.data[0]
+
+
+def today_has_weight_row(tz_offset: int = 8) -> bool:
+    """今天台灣日期是否已有體重筆（自動同步判斷『當天已記錄』用）。"""
+    from datetime import timedelta
+
+    now_tw = datetime.now(timezone.utc) + timedelta(hours=tz_offset)
+    today = now_tw.date()
+    result = (
+        supabase.table("weight_logs")
+        .select("id")
+        .eq("log_date", today.isoformat())
+        .limit(1)
+        .execute()
+    )
+    return bool(result.data)
+
+
+def get_latest_weight_before(log_date: date) -> dict | None:
+    """取得 log_date 之前（不含當天）最近一筆體重，用於 /w 顯示『上次』。
+
+    以 log_date 比較而非 recorded_at：確保同一天重複 /w 時，『上次』指向前一天，
+    而非今天剛被覆蓋的自己。
+    """
+    result = (
+        supabase.table("weight_logs")
+        .select("*")
+        .lt("log_date", log_date.isoformat())
+        .order("log_date", desc=True)
+        .order("id", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return result.data[0] if result.data else None
 
 
 def get_last_weight() -> dict | None:

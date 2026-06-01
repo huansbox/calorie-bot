@@ -1,16 +1,18 @@
 import logging
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from services.db import get_previous_weight, get_weight_moving_avg, insert_weight
+from services.db import get_latest_weight_before, get_weight_moving_avg, upsert_weight
 
 logger = logging.getLogger(__name__)
 
+TW_TZ = timezone(timedelta(hours=8))
+
 
 async def cmd_weight(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """處理 /w <數字> 指令，記錄體重。"""
+    """處理 /w <數字> 指令，記錄體重（upsert：當天一筆，覆蓋既有含自動 coros 筆）。"""
     if not context.args:
         await update.message.reply_text("用法：/w 74.2")
         return
@@ -21,14 +23,11 @@ async def cmd_weight(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("請輸入數字，例如：/w 74.2")
         return
 
-    # 先取上一筆（插入前的最新一筆就是「上次」）
-    prev = get_previous_weight()
-    # 這裡邏輯：insert 前的 last 就是 previous
-    from services.db import get_last_weight
+    today = datetime.now(TW_TZ).date()
+    # 「上次」取當天之前最近一筆 → 同日重複 /w 時 prev 指向前一天，不是剛被覆蓋的自己
+    prev = get_latest_weight_before(today)
 
-    prev = get_last_weight()
-
-    insert_weight(weight)
+    upsert_weight(weight, log_date=today, source="manual")
 
     avg = get_weight_moving_avg(7)
     if avg:
@@ -38,8 +37,8 @@ async def cmd_weight(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if prev:
         prev_kg = float(prev["weight_kg"])
-        prev_date = datetime.fromisoformat(prev["recorded_at"])
-        days_ago = (datetime.now(prev_date.tzinfo) - prev_date).days
+        prev_date = date.fromisoformat(prev["log_date"])
+        days_ago = (today - prev_date).days
         diff = weight - prev_kg
         sign = "+" if diff > 0 else ""
         lines.append(f"上次：{prev_kg} kg（{days_ago} 天前）")
