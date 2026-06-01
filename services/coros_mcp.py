@@ -27,6 +27,7 @@ MCP_PROTOCOL_VERSION = "2024-11-05"
 
 _DATE_RE = re.compile(r"^---\s*(\d{8})\s*---")
 _CAL_RE = re.compile(r"Calories:\s*([\d,]+)\s*kcal")
+_WEIGHT_RE = re.compile(r"Weight:\s*([\d.]+)\s*kg", re.IGNORECASE)
 
 
 class CorosMCPError(Exception):
@@ -166,12 +167,17 @@ def _mcp_notify(mcp_url: str, access_token: str, session: str, method: str, para
         r.read()
 
 
-def fetch_daily_health(token: dict, days: int = 2, tz: str = "Asia/Taipei") -> str:
-    """呼叫 MCP queryDailyHealthData 回傳純文字。需要 token['access_token']。"""
+def _call_mcp_tool(token: dict, tool_name: str, arguments: dict) -> str:
+    """共用的 MCP tool 呼叫流程：initialize → initialized → tools/call → 取回 text。
+
+    只用既有 token['access_token']，**不 refresh**（refresh 由 fetch_and_persist 負責）。
+    體重同步刻意走 load_token → fetch_user_info（見 PRD「Token 處理」），就靠這條
+    不綁 refresh 的路徑成立。
+    """
     mcp_url = token.get("mcp_url", DEFAULT_MCP_URL)
     access_token = token["access_token"]
 
-    init_resp, sess = _mcp_call(mcp_url, access_token, "initialize", {
+    _, sess = _mcp_call(mcp_url, access_token, "initialize", {
         "protocolVersion": MCP_PROTOCOL_VERSION,
         "capabilities": {},
         "clientInfo": {"name": "calobot", "version": "1.0.0"},
@@ -181,16 +187,16 @@ def fetch_daily_health(token: dict, days: int = 2, tz: str = "Asia/Taipei") -> s
     _mcp_notify(mcp_url, access_token, sess, "notifications/initialized", {})
 
     call_resp, _ = _mcp_call(mcp_url, access_token, "tools/call", {
-        "name": "queryDailyHealthData",
-        "arguments": {"days": days, "timezone": tz},
+        "name": tool_name,
+        "arguments": arguments,
     }, session=sess, req_id=2)
 
     if "error" in call_resp:
-        raise CorosMCPError(f"queryDailyHealthData 回應 error: {call_resp['error']}")
+        raise CorosMCPError(f"{tool_name} 回應 error: {call_resp['error']}")
     result = call_resp.get("result", {})
     contents = result.get("content", [])
     if not contents:
-        raise CorosMCPError("queryDailyHealthData 回應沒有 content")
+        raise CorosMCPError(f"{tool_name} 回應沒有 content")
     text = contents[0].get("text", "")
     # COROS 回的 text 是 JSON 字串包了一層真的文字，剝掉
     if text.startswith('"') and text.endswith('"'):
@@ -199,6 +205,21 @@ def fetch_daily_health(token: dict, days: int = 2, tz: str = "Asia/Taipei") -> s
         except json.JSONDecodeError:
             pass
     return text
+
+
+def fetch_daily_health(token: dict, days: int = 2, tz: str = "Asia/Taipei") -> str:
+    """呼叫 MCP queryDailyHealthData 回傳純文字。需要 token['access_token']。"""
+    return _call_mcp_tool(token, "queryDailyHealthData", {"days": days, "timezone": tz})
+
+
+def fetch_user_info(token: dict) -> str:
+    """呼叫 MCP queryUserInfo（無參數）回傳 user profile 純文字。需要 token['access_token']。
+
+    比照 fetch_daily_health：只用既有 access_token 發 MCP call，不 refresh。
+    體重同步走 load_token → fetch_user_info，**不可複用 fetch_and_persist**
+    （它把 refresh+save+fetch 綁死，會違反「體重同步不 refresh」的要求，見 PRD US22）。
+    """
+    return _call_mcp_tool(token, "queryUserInfo", {})
 
 
 # ── 文字解析 ────────────────────────────────────────────────
@@ -220,6 +241,29 @@ def parse_daily_health(text: str) -> dict[date, int]:
             out[current_date] = int(m.group(1).replace(",", ""))
             current_date = None
     return out
+
+
+def parse_user_weight(text: str) -> float | None:
+    """從 queryUserInfo 文字輸出解出體重（kg），解析不到回 None。
+
+    格式（實測，見 issues/003）：
+
+        User Profile Information
+        ========================
+
+        Height: 170.0 cm
+        Weight: 70.7 kg
+        ...
+
+    缺 Weight 欄位、空字串、數值畸形皆回 None（比照 parse_daily_health 的容錯風格）。
+    """
+    m = _WEIGHT_RE.search(text)
+    if not m:
+        return None
+    try:
+        return float(m.group(1))
+    except ValueError:
+        return None
 
 
 # ── 高階介面（給 scheduler 用）─────────────────────────────

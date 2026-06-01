@@ -11,6 +11,7 @@ from services.coros_mcp import (
     fetch_and_persist,
     load_token,
     parse_daily_health,
+    parse_user_weight,
     refresh_access_token,
     save_token,
 )
@@ -64,6 +65,52 @@ class TestParseDailyHealth:
             "Calories: 500 kcal\n"
         )
         assert parse_daily_health(text) == {date(2026, 1, 2): 500}
+
+
+# ── parse_user_weight ──────────────────────────────────────
+
+class TestParseUserWeight:
+    FULL_PROFILE = (
+        "User Profile Information\n"
+        "========================\n\n"
+        "Height: 170.0 cm\n"
+        "Weight: 70.7 kg\n"
+        "Birthday: 1986-10-02 (Age: 39)\n"
+        "Gender: Male\n"
+        "Nickname: LinShuHuan\n"
+    )
+
+    def test_full_profile_block(self):
+        assert parse_user_weight(self.FULL_PROFILE) == 70.7
+
+    def test_integer_value(self):
+        assert parse_user_weight("Weight: 71 kg") == 71.0
+
+    def test_two_decimal_places(self):
+        assert parse_user_weight("Weight: 68.45 kg") == 68.45
+
+    def test_surrounding_noise(self):
+        text = "blah\nHeight: 170.0 cm\n   Weight:   72.3 kg   \nGender: Male\n"
+        assert parse_user_weight(text) == 72.3
+
+    def test_case_insensitive(self):
+        assert parse_user_weight("weight: 70.0 KG") == 70.0
+
+    def test_does_not_pick_up_height(self):
+        # 只有 Height、沒有 Weight → None（不可誤抓 170.0）
+        assert parse_user_weight("Height: 170.0 cm\n") is None
+
+    def test_missing_weight_field(self):
+        assert parse_user_weight("Gender: Male\nNickname: x\n") is None
+
+    def test_empty_string(self):
+        assert parse_user_weight("") is None
+
+    def test_malformed_number(self):
+        assert parse_user_weight("Weight: 70.7.5 kg") is None
+
+    def test_no_number_before_unit(self):
+        assert parse_user_weight("Weight: kg") is None
 
 
 # ── Token 持久化 ─────────────────────────────────────────────
