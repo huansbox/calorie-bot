@@ -222,14 +222,15 @@ async def sync_coros_tdee(app: Application):
 
 
 async def sync_coros_weight(app: Application):
-    """每日 10:29 從 COROS profile 抓當前體重 → 決策 → upsert（fill-missing-only）。
+    """每日 10:29（主抓）+ 22:29（fallback）從 COROS profile 抓體重 → 決策 → upsert。
 
     - token 沿用 03:05 sync_coros_tdee refresh 過的 access_token：本 job 走
       load_token → fetch_user_info，**不自己 refresh**（PRD US22，把 rotation
       風險集中在單一每日時點）。
     - 抓取 / 解析失敗一律當 fetched=None，交給 decide_weight_sync 走告警分支。
-    - 決策由純函式 decide_weight_sync 負責；本 job 只依 should_write 寫入。
-      告警 / 提醒的 Telegram 發送見 issues/006。
+    - 決策由純函式 decide_weight_sync 負責：should_write → upsert；
+      decision.message 不為 None → 推 Telegram（值同上次的輕提醒 / 抓取失敗 /
+      跳變過大的告警）。fallback 透過「當天已有筆 → SKIP」自動成立，晨重優先。
     """
     try:
         token = load_token(COROS_TOKEN_PATH)
@@ -251,6 +252,12 @@ async def sync_coros_weight(app: Application):
 
     if decision.should_write:
         upsert_weight(fetched, source="coros")
+
+    if decision.message:
+        try:
+            await app.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=decision.message)
+        except Exception as send_err:
+            logger.error("Failed to send weight sync alert: %s", send_err)
 
 
 async def cleanup_expired_images(app: Application):
@@ -323,7 +330,7 @@ def setup_scheduler(app: Application) -> AsyncIOScheduler:
     scheduler.add_job(
         sync_coros_weight,
         "cron",
-        hour=10,
+        hour="10,22",
         minute=29,
         args=[app],
         id="sync_coros_weight",
@@ -331,7 +338,7 @@ def setup_scheduler(app: Application) -> AsyncIOScheduler:
 
     scheduler.start()
     logger.info(
-        "Scheduler started: daily summary at %d:00, API report Mon %d:05, nutrition report Mon %d:10, image cleanup at 03:00, COROS sync at 03:05",
+        "Scheduler started: daily summary at %d:00, API report Mon %d:05, nutrition report Mon %d:10, image cleanup at 03:00, COROS TDEE sync at 03:05, COROS weight sync at 10:29/22:29",
         PUSH_HOUR,
         PUSH_HOUR,
         PUSH_HOUR,
