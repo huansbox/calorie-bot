@@ -15,7 +15,7 @@
 ## Acceptance criteria
 
 - [x] `/w` 改 upsert on `log_date`，寫 `source='manual'`
-- [ ] 當天已有 coros 自動筆 → `/w` 覆蓋成 manual 值（手動優先）⏳ 待 6/02 有 coros 自動筆後驗（見 CLAUDE.md 待辦）
+- [x] 當天已有 coros 自動筆 → `/w` 覆蓋成 manual 值（手動優先）✅ 2026-06-02 隔離表整合測試驗證：先 coros 後 manual upsert on `log_date` → 1 筆、`source=manual`、weight 更新、`recorded_at` 保留（DB `DEFAULT now()` 補值＝NOT NULL 修復成立），prod 真表零變動
 - [x] 同一天重複 `/w` → 以最後一次為準（覆蓋，不新增 row）
 - [x] 移除 weight.py 冗餘的 prev 雙重計算
 - [x] 驗證「上次 / 變化」顯示在 upsert 模型下正確（同日改兩次時 prev 指向前一天而非自己）

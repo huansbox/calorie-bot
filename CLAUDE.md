@@ -110,11 +110,12 @@ docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 - 排程決策：6/01 22:29 台北 `SKIP`（當天已有筆）、6/02 10:29 台北 `WRITE_SILENT`（跳變 0.8kg < 3kg 閾值）（issues/005、006）
 - DB 落地：weight_logs 有 `log_date=2026-06-02 weight_kg=72.20 source=coros`，upsert `on_conflict=log_date` 回 201（issues/006）
 - 昨日摘要：6/02 08:00 job 查 weight_logs（limit=1 取最新 + limit=7 算均線）並成功送出（issues/008）
+- `/w` 覆蓋 + NOT NULL 修復：隔離表整合測試（`CREATE TABLE weight_logs_verify (LIKE weight_logs INCLUDING ALL)`，驗完 DROP，prod 真表零變動）— 先 coros 後 manual upsert on `log_date` → 1 筆、`source=manual`、weight 更新、`recorded_at` 保留（payload 缺 `recorded_at` 由 `DEFAULT now()` 補＝NOT NULL 修復成立）（issues/007）
 - 時序註記：08:00 摘要（00:00 UTC）跑在體重同步（02:29 UTC）之前，故早上摘要的「最新體重」是前一天的筆，非當天晨重。符合「昨日摘要」語意，不需改
 
 **仍待真實事件觸發**：
-- 當天有 coros 自動筆後打一次 `/w`，確認 upsert 覆蓋成 manual + `/w` 寫入路徑（NOT NULL 修復）（issues/007 端到端）
 - 值同上次的輕提醒 / 跳變 >3kg 告警，待實際觸發時觀察（issues/006）
+- （可選，非阻塞）從 Telegram 實打一次 `/w` 確認 handler→回覆全鏈；DB 行為層已由隔離表測試驗證，此為 UI 層補確認，風險低
 
 ## 未來想做
 
