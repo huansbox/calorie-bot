@@ -104,13 +104,17 @@ docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 
 ## 待驗（COROS 體重同步，2026-06-01 上線）
 
-功能已部署 prod 且通過唯讀驗證（`queryUserInfo → parse = 71.0`）。排程時點皆**台灣時間**（scheduler `timezone="Asia/Taipei"`；VPS 系統時鐘是 UTC，差 8 小時）。部署在 6/01 台灣 18:15 完成，已晚於當天 10:29，故**新 job 首次實跑是 6/01 台灣 22:29（= 14:29 UTC）→ 預期 SKIP**（6/01 已有筆）。**首次實際「寫入」最快 2026-06-02 台灣 10:29**（若當天還沒筆）。下次 session 撈 VPS log 補確認：
+排程時點皆**台灣時間**（scheduler `timezone="Asia/Taipei"`；VPS 系統時鐘是 UTC，差 8 小時）。
 
-- `journalctl -u calorie-bot | grep "COROS weight sync"`：確認 6/02 10:29 出現 `... -> WRITE_SILENT` 且 weight_logs 有當日 `source='coros'` 筆（issues/005、006）
-- 6/02 08:00 昨日摘要實際出現「⚖️ 最新體重 X kg（日期，7日均線）」行且格式正確（issues/008）
-- 當天有 coros 自動筆後打一次 `/w`，確認 upsert 覆蓋成 manual（issues/007 的端到端）
+**已驗證（2026-06-02）**：核心同步鏈三條證據對齊 —
+- 排程決策：6/01 22:29 台北 `SKIP`（當天已有筆）、6/02 10:29 台北 `WRITE_SILENT`（跳變 0.8kg < 3kg 閾值）（issues/005、006）
+- DB 落地：weight_logs 有 `log_date=2026-06-02 weight_kg=72.20 source=coros`，upsert `on_conflict=log_date` 回 201（issues/006）
+- 昨日摘要：6/02 08:00 job 查 weight_logs（limit=1 取最新 + limit=7 算均線）並成功送出（issues/008）
+- 時序註記：08:00 摘要（00:00 UTC）跑在體重同步（02:29 UTC）之前，故早上摘要的「最新體重」是前一天的筆，非當天晨重。符合「昨日摘要」語意，不需改
+
+**仍待真實事件觸發**：
+- 當天有 coros 自動筆後打一次 `/w`，確認 upsert 覆蓋成 manual + `/w` 寫入路徑（NOT NULL 修復）（issues/007 端到端）
 - 值同上次的輕提醒 / 跳變 >3kg 告警，待實際觸發時觀察（issues/006）
-- `/w` 寫入路徑本身（NOT NULL 修復）也建議用一次真實量測確認
 
 ## 未來想做
 
