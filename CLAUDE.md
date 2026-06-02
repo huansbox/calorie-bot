@@ -102,20 +102,21 @@ docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 - **體重 7 日移動平均**：/w 記錄後顯示均線，週報體重區段與 08:00 昨日摘要也顯示。一天一筆後「最近 7 筆」即「最近 7 天」。取最近 7 筆，不足 3 筆不顯示。用於壓平量測時機造成的 1-2 kg 日間波動
 - **補記 /b**：預設昨天（比照 /t），MMDD 4位數指定日期（今天或未來自動退回上一年），可選 1-4 餐別（預設其他）。recorded_at 設為台灣正午 12:00 轉 UTC，確保落在 get_meals_by_date 查詢區間內。照片 caption 支援純餐別/日期（allow_empty_food）。食物描述若為快取編號（11-99，可加 x 倍數）則走 cache 路徑免 AI。已知限制：修正補記餐點後累計顯示今天而非補記日（已加註記提示）
 
-## 待驗（COROS 體重同步，2026-06-01 上線）
+## COROS 體重同步驗收（2026-06-01 上線，2026-06-02 全數驗證）
 
-排程時點皆**台灣時間**（scheduler `timezone="Asia/Taipei"`；VPS 系統時鐘是 UTC，差 8 小時）。
+issues 001–008 的 acceptance criteria **已全數打勾**，PRD 22 條 User Story 全覆蓋。排程時點皆**台灣時間**（scheduler `timezone="Asia/Taipei"`；VPS 系統時鐘是 UTC，差 8 小時）。
 
-**已驗證（2026-06-02）**：核心同步鏈三條證據對齊 —
+**已驗證（2026-06-02）**：
 - 排程決策：6/01 22:29 台北 `SKIP`（當天已有筆）、6/02 10:29 台北 `WRITE_SILENT`（跳變 0.8kg < 3kg 閾值）（issues/005、006）
 - DB 落地：weight_logs 有 `log_date=2026-06-02 weight_kg=72.20 source=coros`，upsert `on_conflict=log_date` 回 201（issues/006）
 - 昨日摘要：6/02 08:00 job 查 weight_logs（limit=1 取最新 + limit=7 算均線）並成功送出（issues/008）
 - `/w` 覆蓋 + NOT NULL 修復：隔離表整合測試（`CREATE TABLE weight_logs_verify (LIKE weight_logs INCLUDING ALL)`，驗完 DROP，prod 真表零變動）— 先 coros 後 manual upsert on `log_date` → 1 筆、`source=manual`、weight 更新、`recorded_at` 保留（payload 缺 `recorded_at` 由 `DEFAULT now()` 補＝NOT NULL 修復成立）（issues/007）
 - 時序註記：08:00 摘要（00:00 UTC）跑在體重同步（02:29 UTC）之前，故早上摘要的「最新體重」是前一天的筆，非當天晨重。符合「昨日摘要」語意，不需改
 
-**仍待真實事件觸發**：
-- 值同上次的輕提醒 / 跳變 >3kg 告警，待實際觸發時觀察（issues/006）
-- （可選，非阻塞）從 Telegram 實打一次 `/w` 確認 handler→回覆全鏈；DB 行為層已由隔離表測試驗證，此為 UI 層補確認，風險低
+**剩運行時觀察（非 acceptance criteria，純錦上添花、非阻塞）**：
+- 值同上次的輕提醒 / 跳變 >3kg 告警的 **Telegram 實際推送**：決策邏輯已由 `test_weight_sync.py` 14 cases 覆蓋，但這兩個分支至今未在 prod 觸發（6/01、6/02 同步都走 WRITE_SILENT），等真實事件出現時瞄一眼 log
+- 今晚 6/02 22:29「coros 自動晨筆 → SKIP」為晨重優先同機制再現（issues/006 已憑 6/01 manual 早筆驗過，此為再確認）
+- 從 Telegram 實打一次 `/w` 的 UI 全鏈 smoke（DB 行為層已由隔離表測試驗證，風險低）
 
 ## 未來想做
 

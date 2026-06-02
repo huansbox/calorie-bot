@@ -16,10 +16,10 @@
 
 - [x] `db.py` 有 upsert on `log_date`、取最近筆、今日是否有筆三個能力
 - [x] `sync_coros_weight` 串起抓取→parse→決策→寫入，掛 10:29
-- [ ] WRITE_SILENT 路徑：當天無筆 → 寫入一筆 `source='coros'` ⏳ 待 6/02 首次自動寫入觀察（見 CLAUDE.md 待辦）
-- [ ] SKIP 路徑：當天已有筆 → 不寫、不報錯 ⏳ 待 10:29/22:29 排程 log 確認
+- [x] WRITE_SILENT 路徑：當天無筆 → 寫入一筆 `source='coros'` ✅ 2026-06-02 10:29 台北 log `today_has_row=False -> WRITE_SILENT`，weight_logs 寫入 `source='coros'` 72.2、upsert 回 201
+- [x] SKIP 路徑：當天已有筆 → 不寫、不報錯 ✅ 2026-06-01 22:29 台北 log `today_has_row=True -> SKIP`，job executed successfully 無報錯
 - [x] token 沿用既有 access_token，函式內**不呼叫 refresh**
-- [ ] 手動觸發可驗證端到端寫入（log 或 DB 查得到今日 coros 筆）⏳ 待 6/02 首次自動寫入觀察（見 CLAUDE.md 待辦）
+- [x] 端到端寫入可驗證（log 或 DB 查得到今日 coros 筆）✅ 2026-06-02 排程自動觸發，DB 查得 `log_date=2026-06-02 source=coros`
 
 ## Blocked by
 
