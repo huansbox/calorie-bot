@@ -134,6 +134,15 @@ VPS 已設定 SSH key 免密碼登入，Claude Code 可直接執行部署：
 ssh root@107.175.30.172 "cd /home/botuser/calorie-bot && sudo -u botuser git pull origin main && sudo systemctl restart calorie-bot"
 ```
 
+### 已知無害現象：op zombie process（決定不修）
+
+`calorie-bot.service` 穩定掛 1 個 zombie：`[op] <defunct>`，parent 是 systemd 啟的常駐 `op run`。根因是 op 啟動背景 `op daemon` 時的 double-fork，中間程序沒被 `wait()` 回收；因常駐 `op run` 永久 block 在等 python（bot），這顆 zombie 一輩子收不掉，每次重啟重生但不累積。**無害**（1 個 PID entry，零 CPU/RAM）。
+
+評估後**決定不修**：
+- 升級 op（2.33.1→2.34.x）無效：changelog 無 reaping/daemon 修正，2.34.0 那條是「Ctrl+C 終止 subprocess」，與此無關。
+- 唯一根治（`op run` 改 `op inject` + tmpfs EnvironmentFile）要犧牲「secret 不落地」這個既有安全屬性、外加改寫 `.env`→`.env.tpl` 與 `RuntimeDirectory`，純為消一顆無害 zombie，不划算。
+- tini/dumb-init 包在 python 外無效：zombie 的 parent 是 op，不是 python。
+
 ### COROS MCP token 部署（首次）
 
 ```bash
