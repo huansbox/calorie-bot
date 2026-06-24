@@ -150,17 +150,20 @@ def _mcp_call(
     return json.loads(raw), sess
 
 
-def _mcp_notify(mcp_url: str, access_token: str, session: str, method: str, params: dict) -> None:
+def _mcp_notify(mcp_url: str, access_token: str, session: str | None, method: str, params: dict) -> None:
     body = {"jsonrpc": "2.0", "method": method, "params": params}
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+        "Authorization": f"Bearer {access_token}",
+    }
+    # session 為 None（server stateless）時不帶 Mcp-Session-Id header
+    if session:
+        headers["Mcp-Session-Id"] = session
     req = urllib.request.Request(
         mcp_url,
         data=json.dumps(body).encode(),
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json, text/event-stream",
-            "Authorization": f"Bearer {access_token}",
-            "Mcp-Session-Id": session,
-        },
+        headers=headers,
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=10) as r:
@@ -182,8 +185,10 @@ def _call_mcp_tool(token: dict, tool_name: str, arguments: dict) -> str:
         "capabilities": {},
         "clientInfo": {"name": "calobot", "version": "1.0.0"},
     })
-    if not sess:
-        raise CorosMCPError("MCP initialize 沒拿到 session id")
+    # COROS MCP server（2026-06 升級至 Build2.11.15 / 協議 2025-06-18）改 stateless：
+    # initialize 不再回 Mcp-Session-Id header。新版 MCP spec 下 session id 屬選用，
+    # 沒有就代表後續呼叫不需帶該 header（_mcp_call / _mcp_notify 的 `if session:` 會略過）。
+    # 舊版曾在此 `raise 沒拿到 session id` 而中止，會誤殺 stateless server。
     _mcp_notify(mcp_url, access_token, sess, "notifications/initialized", {})
 
     call_resp, _ = _mcp_call(mcp_url, access_token, "tools/call", {
