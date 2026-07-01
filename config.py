@@ -10,10 +10,11 @@ TELEGRAM_CHAT_ID: int = int(os.environ["TELEGRAM_CHAT_ID"])
 SUPABASE_URL: str = os.environ["SUPABASE_URL"]
 SUPABASE_KEY: str = os.environ["SUPABASE_KEY"]
 
-AI_PROVIDER: str = os.getenv("AI_PROVIDER", "gemini")  # "gemini" or "claude"
+AI_PROVIDER: str = os.getenv("AI_PROVIDER", "claude-cli")  # "claude-cli" / "gemini" / "claude"
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 CLAUDE_CLI_PATH: str = os.getenv("CLAUDE_CLI_PATH", "/root/.local/bin/claude")
+CLAUDE_CLI_MODEL: str = os.getenv("CLAUDE_CLI_MODEL", "sonnet")  # 別名，不鎖版本
 
 BMR: int = int(os.getenv("BMR", "1577"))
 PUSH_HOUR: int = int(os.getenv("PUSH_HOUR", "8"))

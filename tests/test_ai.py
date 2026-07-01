@@ -1,6 +1,16 @@
+import asyncio
+import json
+
 import pytest
 
-from services.ai import FoodAnalysis, _normalize_model_name, parse_ai_response
+import services.ai
+from services.ai import (
+    FoodAnalysis,
+    _analyze_claude_cli,
+    _normalize_model_name,
+    analyze_food,
+    parse_ai_response,
+)
 
 
 class TestParseAiResponse:
@@ -94,3 +104,123 @@ class TestNormalizeModelName:
 
     def test_strips_trailing_whitespace(self):
         assert _normalize_model_name("  claude-opus-4-7  ") == "claude-opus-4-7"
+
+
+def _stub_analysis(provider: str) -> FoodAnalysis:
+    return FoodAnalysis(
+        description="test",
+        calories=100,
+        protein_g=10.0,
+        carbs_g=10.0,
+        fat_g=2.0,
+        confidence="high",
+        note="",
+        provider=provider,
+    )
+
+
+def _patch_analyzers(monkeypatch, calls: list, gemini_raises: bool = False):
+    """把三個 _analyze_* 換成記錄呼叫的 stub。AI_PROVIDER 需另外 monkeypatch。"""
+    async def fake_claude(text=None, image_path=None):
+        calls.append("claude")
+        return _stub_analysis("claude-api")
+
+    async def fake_gemini(text=None, image_path=None):
+        calls.append("gemini")
+        if gemini_raises:
+            raise RuntimeError("gemini boom")
+        return _stub_analysis("gemini")
+
+    async def fake_cli(text=None, image_path=None):
+        calls.append("cli")
+        return _stub_analysis("claude-cli")
+
+    monkeypatch.setattr("services.ai._analyze_claude", fake_claude)
+    monkeypatch.setattr("services.ai._analyze_gemini", fake_gemini)
+    monkeypatch.setattr("services.ai._analyze_claude_cli", fake_cli)
+
+
+class TestAnalyzeFoodRouting:
+    def test_default_claude_cli_only(self, monkeypatch):
+        """預設（claude-cli）：只走 claude -p，不碰 Gemini。"""
+        calls = []
+        monkeypatch.setattr("services.ai.AI_PROVIDER", "claude-cli")
+        _patch_analyzers(monkeypatch, calls)
+        result = asyncio.run(analyze_food(text="滷肉飯"))
+        assert calls == ["cli"]
+        assert result.provider == "claude-cli"
+
+    def test_unknown_provider_falls_to_claude_cli(self, monkeypatch):
+        """未知值也落到 claude-cli 分支（無 fallback）。"""
+        calls = []
+        monkeypatch.setattr("services.ai.AI_PROVIDER", "something-else")
+        _patch_analyzers(monkeypatch, calls)
+        result = asyncio.run(analyze_food(text="滷肉飯"))
+        assert calls == ["cli"]
+
+    def test_claude_api_branch(self, monkeypatch):
+        """AI_PROVIDER=claude → Claude API，無 fallback。"""
+        calls = []
+        monkeypatch.setattr("services.ai.AI_PROVIDER", "claude")
+        _patch_analyzers(monkeypatch, calls)
+        result = asyncio.run(analyze_food(text="滷肉飯"))
+        assert calls == ["claude"]
+        assert result.provider == "claude-api"
+
+    def test_gemini_branch_no_fallback_on_success(self, monkeypatch):
+        """AI_PROVIDER=gemini 成功 → 只走 Gemini，不 fallback。"""
+        calls = []
+        monkeypatch.setattr("services.ai.AI_PROVIDER", "gemini")
+        _patch_analyzers(monkeypatch, calls)
+        result = asyncio.run(analyze_food(text="滷肉飯"))
+        assert calls == ["gemini"]
+        assert result.provider == "gemini"
+
+    def test_gemini_branch_falls_back_to_cli(self, monkeypatch):
+        """AI_PROVIDER=gemini 失敗 → fallback 到 claude -p。"""
+        calls = []
+        monkeypatch.setattr("services.ai.AI_PROVIDER", "gemini")
+        _patch_analyzers(monkeypatch, calls, gemini_raises=True)
+        result = asyncio.run(analyze_food(text="滷肉飯"))
+        assert calls == ["gemini", "cli"]
+        assert result.provider == "claude-cli"
+
+
+class _FakeProc:
+    returncode = 0
+
+    async def communicate(self):
+        envelope = json.dumps(
+            {
+                "result": '{"description":"滷肉飯","protein_g":28.0,"carbs_g":88.0,"fat_g":20.0,"confidence":"high","note":""}',
+                "usage": {"input_tokens": 10, "output_tokens": 20},
+                "modelUsage": {"claude-sonnet-4-6[1m]": {}},
+            }
+        )
+        return envelope.encode("utf-8"), b""
+
+
+class TestClaudeCliModelArg:
+    def _run_and_capture(self, monkeypatch, image_path=None):
+        captured = {}
+
+        async def fake_exec(*cmd, **kwargs):
+            captured["cmd"] = cmd
+            return _FakeProc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        result = asyncio.run(_analyze_claude_cli(text="滷肉飯", image_path=image_path))
+        return captured["cmd"], result
+
+    def test_model_flag_passed(self, monkeypatch):
+        cmd, _ = self._run_and_capture(monkeypatch)
+        assert "--model" in cmd
+        i = cmd.index("--model")
+        assert cmd[i + 1] == services.ai.CLAUDE_CLI_MODEL
+
+    def test_image_adds_allowed_tools_and_keeps_model(self, monkeypatch):
+        cmd, _ = self._run_and_capture(monkeypatch, image_path="/tmp/fake.jpg")
+        assert "--model" in cmd
+        assert "--allowedTools" in cmd
+        j = cmd.index("--allowedTools")
+        assert cmd[j + 1] == "Read"

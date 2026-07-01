@@ -4,7 +4,7 @@ import logging
 import re
 from dataclasses import dataclass
 
-from config import AI_PROVIDER, ANTHROPIC_API_KEY, CLAUDE_CLI_PATH, GEMINI_API_KEY
+from config import AI_PROVIDER, ANTHROPIC_API_KEY, CLAUDE_CLI_MODEL, CLAUDE_CLI_PATH, GEMINI_API_KEY
 from services.nutrition import calc_calories
 
 logger = logging.getLogger(__name__)
@@ -287,7 +287,10 @@ async def _analyze_claude_cli(
     if not text and not image_path:
         raise ValueError("至少需要提供文字或照片")
 
-    cmd = [CLAUDE_CLI_PATH, "-p", "".join(prompt_parts), "--output-format", "json"]
+    cmd = [
+        CLAUDE_CLI_PATH, "-p", "".join(prompt_parts),
+        "--output-format", "json", "--model", CLAUDE_CLI_MODEL,
+    ]
     if image_path:
         cmd.extend(["--allowedTools", "Read"])
 
@@ -341,22 +344,23 @@ async def analyze_food(
     text: str | None = None,
     image_path: str | None = None,
 ) -> FoodAnalysis:
-    """分析食物：Gemini API → claude -p CLI fallback。
+    """分析食物：預設走 claude -p CLI（唯一路徑，無 fallback）。
 
-    若 AI_PROVIDER="claude" 則直接使用 Claude API（無 fallback）。
+    AI_PROVIDER 路由：
+    - "claude"：直接用 Claude API（無 fallback，備選）
+    - "gemini"：Gemini API 優先，失敗時 fallback 到 claude -p CLI（保留）
+    - 其餘（含預設 "claude-cli"）：只走 claude -p CLI，無 fallback
     """
     if AI_PROVIDER == "claude":
         return await _analyze_claude(text=text, image_path=image_path)
 
-    # Primary: Gemini
-    try:
-        return await _analyze_gemini(text=text, image_path=image_path)
-    except Exception as e:
-        logger.warning("Gemini 分析失敗，切換至 claude -p: %s", e)
-
-    # Fallback: claude -p CLI
-    try:
+    if AI_PROVIDER == "gemini":
+        # 保留：Gemini API 優先，失敗時 fallback 到 claude -p CLI
+        try:
+            return await _analyze_gemini(text=text, image_path=image_path)
+        except Exception as e:
+            logger.warning("Gemini 分析失敗，切換至 claude -p: %s", e)
         return await _analyze_claude_cli(text=text, image_path=image_path)
-    except Exception as e:
-        logger.error("claude -p 也失敗: %s", e)
-        raise RuntimeError("AI 分析全部失敗（Gemini + claude -p）") from e
+
+    # 預設 claude-cli：唯一路徑，無 fallback
+    return await _analyze_claude_cli(text=text, image_path=image_path)
