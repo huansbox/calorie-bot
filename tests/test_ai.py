@@ -224,3 +224,32 @@ class TestClaudeCliModelArg:
         assert "--allowedTools" in cmd
         j = cmd.index("--allowedTools")
         assert cmd[j + 1] == "Read"
+
+
+class _FakeProcMultiModel:
+    """新版 CLI 的 modelUsage 併入內部 haiku（第一個 key），主判讀模型 token 較大。"""
+
+    returncode = 0
+
+    async def communicate(self):
+        envelope = json.dumps(
+            {
+                "result": '{"description":"滷肉飯","protein_g":15.0,"carbs_g":65.0,"fat_g":20.0,"confidence":"high","note":""}',
+                "usage": {"input_tokens": 2740, "output_tokens": 116},
+                "modelUsage": {
+                    "claude-haiku-4-5-20251001": {"inputTokens": 537, "outputTokens": 21},
+                    "claude-sonnet-5": {"inputTokens": 2740, "outputTokens": 116},
+                },
+            }
+        )
+        return envelope.encode("utf-8"), b""
+
+
+def test_ai_model_picks_main_model_not_internal_haiku(monkeypatch):
+    """modelUsage 多 key 時取用量最大的主判讀模型，而非第一個 key 的內部 haiku。"""
+    async def fake_exec(*cmd, **kwargs):
+        return _FakeProcMultiModel()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    result = asyncio.run(_analyze_claude_cli(text="滷肉飯"))
+    assert result.ai_model == "claude-sonnet-5"

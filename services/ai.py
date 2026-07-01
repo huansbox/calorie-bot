@@ -326,10 +326,16 @@ async def _analyze_claude_cli(
     result.output_tokens = usage.get("output_tokens", 0) or 0
     result.provider = "claude-cli"
 
-    # 從 modelUsage 取實際使用的模型名稱（稽核用）
+    # 從 modelUsage 取實際判讀模型（稽核用）。
+    # 新版 CLI（≥2.1.197）會在 modelUsage 併入內部小模型（如 haiku），主判讀模型
+    # 是用量最大的那個；不能取第一個 key，否則會抓到內部 haiku 而非 --model 指定的模型。
     model_usage = output.get("modelUsage") or {}
     if model_usage:
-        raw_model = next(iter(model_usage.keys()))
+        raw_model = max(
+            model_usage,
+            key=lambda m: (model_usage[m].get("inputTokens", 0) or 0)
+            + (model_usage[m].get("outputTokens", 0) or 0),
+        )
         result.ai_model = _normalize_model_name(raw_model)
     else:
         logger.warning("claude -p 回傳缺少 modelUsage 欄位")
