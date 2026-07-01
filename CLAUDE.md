@@ -6,19 +6,19 @@
 
 ## 進行中的設計
 
-- **claude -p 轉正 + 每月更新提醒**（設計定案、經兩輪 3-agent 複審、待實作）：Gemini 停用（code 保留），`claude -p` 轉為唯一預設路徑、`--model sonnet` 走 `CLAUDE_CLI_MODEL` env、切 botuser 自己的 binary、`DISABLE_AUTOUPDATER=1` + 每月 1 號 10:30 Telegram 提醒手動 update（附可貼 prompt）、每餐回覆改印模型、收回 `/root` 700（延後）。詳見 [docs/claude-cli-primary-design.md](docs/claude-cli-primary-design.md)
+- **claude -p 轉正 + 每月更新提醒**（Code 完成於 branch `feat/claude-cli-primary`，待 review + VPS 部署）：Gemini 停用（code 保留），`claude -p` 轉為唯一預設路徑、`--model sonnet` 走 `CLAUDE_CLI_MODEL` env、切 botuser 自己的 binary、`DISABLE_AUTOUPDATER=1` + 每月 1 號 10:30 Telegram 提醒手動 update（附可貼 prompt）、每餐回覆改印模型、收回 `/root` 700（延後）。**VPS 部署 8 步（smoke／翻 .env／restart／驗證／`chmod 700`）尚未執行**。詳見 [docs/claude-cli-primary-design.md](docs/claude-cli-primary-design.md)
 
 ## 技術架構
 
 - **語言**: Python 3.12
 - **套件管理**: uv
 - **Bot 框架**: python-telegram-bot v22 (polling 模式，HTTPXRequest 自訂 timeout: read/write 20s, connect 10s)
-- **AI**: Gemini 優先 + claude -p CLI 自動 fallback
-  - Gemini 2.5 Pro (預設，JSON mode 強制合法輸出)
-  - claude -p CLI (fallback，走 Max 訂閱零費用，透過 subprocess 呼叫)
-  - Claude Sonnet 4.6 API (備選，AI_PROVIDER=claude 時使用)
+- **AI**: claude -p CLI 為預設唯一路徑；Gemini / Claude API 保留可切換（`AI_PROVIDER`）
+  - claude -p CLI (預設，`AI_PROVIDER=claude-cli`，走 Max 訂閱零費用，透過 subprocess 呼叫，`--model` 由 `CLAUDE_CLI_MODEL` 控制，預設 `sonnet`)
+  - Gemini 2.5 Pro (`AI_PROVIDER=gemini`，JSON mode 強制合法輸出，失敗時仍 fallback claude -p)
+  - Claude Sonnet 4.6 API (`AI_PROVIDER=claude`，無 fallback)
 - **資料庫**: Supabase (PostgreSQL) — meals（含 ai_provider 欄位）, weight_logs（log_date UNIQUE + source，一天一筆）, daily_tdee, food_cache 四張表，全部啟用 RLS，使用 Secret Key 繞過
-- **排程**: APScheduler (AsyncIOScheduler) — 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理 + 03:05 COROS TDEE 同步 + 10:29/22:29 COROS 體重同步
+- **排程**: APScheduler (AsyncIOScheduler) — 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理 + 03:05 COROS TDEE 同步 + 10:29/22:29 COROS 體重同步 + 每月 1 號 10:30 claude 更新提醒
 - **COROS 整合**: queryDailyHealthData → 每日自動補 daily_tdee（免手動 /t）；queryUserInfo → 每日自動補體重（免手動 /w）。同一條 MCP 管線（OAuth + refresh_token rotation）
 - **密鑰管理**: 1Password — 本機 `op run` + VPS Service Account，`.env` 只存 `op://` 參照
 - **部署**: RackNerd VPS (Ubuntu 24.04, systemd + `op run`)
@@ -28,7 +28,7 @@
 ```
 main.py              # 進入點，註冊 handlers + 排程，auth_check decorator
 config.py            # 環境變數讀取 (dotenv)，含 BMR、COROS_TOKEN_PATH 設定
-scheduler.py         # 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理 + 03:05 COROS TDEE 同步 + 10:29/22:29 COROS 體重同步
+scheduler.py         # 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理 + 03:05 COROS TDEE 同步 + 10:29/22:29 COROS 體重同步 + 每月 1 號 10:30 claude 更新提醒
 handlers/
   meal.py            # 食物記錄核心 (文字/照片 → AI 分析 → DB → 回覆)，含 token 追蹤
   weight.py          # /w 體重記錄（upsert on log_date，一天一筆覆蓋；含 7 日移動平均）
@@ -88,8 +88,8 @@ docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 - **COROS token rotation**：refresh_token 每次 refresh 都換新，舊的失效。`services/coros_mcp.py` 用 atomic write (tmp file + rename) 寫回避免半成品。`save → fetch` 順序確保 refresh 成功就先持久化，即使 MCP call 失敗下次仍能用
 - **COROS 體重自動同步**：每日 10:29（主）+ 22:29（fallback）`queryUserInfo` 抓 profile 當前體重 → `decide_weight_sync` 純函式決策 → upsert `weight_logs`。**走「日期路線」**：profile 體重無時間戳，無法區分「同重」與「沒量」，故只要當天沒筆就寫（接受偶爾寫沿用舊值的假點，換零紀律），`/w` 是假點修正出口。fill-missing-only（當天已有筆→SKIP，故 fallback 自動成立、晨重優先）。決策真值表：當天有筆→SKIP；抓不到→告警不寫；無基準→寫；跳變 >3kg（含離譜壞值）→告警不寫；值同上次→寫+輕提醒；正常→靜默寫。**token 不自己 refresh**，沿用 03:05 `sync_coros_tdee` rotate 過的 access_token（US22，rotation 風險集中單一時點）
 - **體重一天一筆**：`weight_logs.log_date`(date) UNIQUE，所有寫入 upsert on log_date（比照 daily_tdee）。手動 /w（`source='manual'`）永遠覆蓋當天，自動同步（`source='coros'`）只在沒筆時寫，故手動永遠優先、無需特判。`source` 純內部驅動覆蓋邏輯，不出現在任何訊息
-- **AI fallback 鏈**：Gemini API → claude -p CLI → 錯誤訊息。AI_PROVIDER=claude 時直接走 Claude API（無 fallback）
-- **claude -p CLI**：透過 subprocess 呼叫 VPS 上的 Claude Code CLI，走 Max 訂閱零費用。有圖片時加 `--allowedTools Read`，timeout 60s
+- **AI 路由（預設 claude-cli-only）**：預設 `AI_PROVIDER=claude-cli` 只走 claude -p CLI、**無 fallback**（掛掉該餐直接「分析失敗」，靠手動記錄逃生）。`AI_PROVIDER=gemini` 才有 fallback 鏈（Gemini API → claude -p CLI）；`AI_PROVIDER=claude` 直接走 Claude API（無 fallback）
+- **claude -p CLI**：透過 subprocess 呼叫 VPS 上的 Claude Code CLI，走 Max 訂閱零費用。`--model` 由 `CLAUDE_CLI_MODEL`（預設 `sonnet` 別名）帶入，有圖片時加 `--allowedTools Read`，timeout 60s
 - **ai_provider 追蹤**：meals 表 `ai_provider` 欄位記錄判讀來源（gemini/claude-cli/claude-api/null），週報依 provider 分組計費
 - **ai_model 追蹤**：meals 表 `ai_model` 欄位記錄實際使用的模型名稱（如 `claude-opus-4-7`），目前只在 claude-cli 路徑寫入（從 stdout JSON envelope 的 `modelUsage` 欄位解析），稽核用途。2026-04-09 API key 洩漏事件衍生
 - **Gemini JSON mode**：response_mime_type + response_json_schema 強制合法 JSON 輸出

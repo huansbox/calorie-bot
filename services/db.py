@@ -137,7 +137,7 @@ def get_weekly_token_usage(tz_offset: int = 8) -> dict:
 
     by_provider: dict[str, dict] = {}
     for r in result.data:
-        # 歷史資料 ai_provider 為 NULL，此專案上線至今全用 Gemini
+        # 歷史 NULL 列＝claude-cli 轉正前的 Gemini 資料；轉正後新列都帶 ai_provider（多為 claude-cli）
         provider = r.get("ai_provider") or "gemini"
         if provider not in by_provider:
             by_provider[provider] = {
