@@ -4,6 +4,10 @@
 
 個人用 Telegram 體重管理 Bot。使用者透過 Telegram 傳食物照片或文字，AI Vision 自動分析三大營養素並記錄至 Supabase。
 
+## 進行中的設計
+
+- **claude -p 轉正 + 每月更新提醒**（設計定案、經兩輪 3-agent 複審、待實作）：Gemini 停用（code 保留），`claude -p` 轉為唯一預設路徑、`--model sonnet` 走 `CLAUDE_CLI_MODEL` env、切 botuser 自己的 binary、`DISABLE_AUTOUPDATER=1` + 每月 1 號 10:30 Telegram 提醒手動 update（附可貼 prompt）、每餐回覆改印模型、收回 `/root` 700（延後）。詳見 [docs/claude-cli-primary-design.md](docs/claude-cli-primary-design.md)
+
 ## 技術架構
 
 - **語言**: Python 3.12
