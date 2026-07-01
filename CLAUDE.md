@@ -6,7 +6,7 @@
 
 ## 進行中的設計
 
-- **claude -p 轉正 + 每月更新提醒**（Code 完成於 branch `feat/claude-cli-primary`，待 review + VPS 部署）：Gemini 停用（code 保留），`claude -p` 轉為唯一預設路徑、`--model sonnet` 走 `CLAUDE_CLI_MODEL` env、切 botuser 自己的 binary、`DISABLE_AUTOUPDATER=1` + 每月 1 號 10:30 Telegram 提醒手動 update（附可貼 prompt）、每餐回覆改印模型、收回 `/root` 700（延後）。**VPS 部署 8 步（smoke／翻 .env／restart／驗證／`chmod 700`）尚未執行**。詳見 [docs/claude-cli-primary-design.md](docs/claude-cli-primary-design.md)
+- **claude -p 轉正 + 每月更新提醒**（**已上線 2026-07-01**）：Gemini 停用（code 保留），`claude -p` 為唯一預設路徑、`--model sonnet`（現解析為 Sonnet 5）走 `CLAUDE_CLI_MODEL` env、切 botuser 自己的 binary（2.1.96→2.1.197）、`DISABLE_AUTOUPDATER=1` + 每月 1 號 10:30 提醒手動 update、每餐回覆印實際模型。部署 smoke 抓到並修掉「2.1.197 modelUsage 混入內部 haiku」bug（取 token 最大主模型）。**剩 `chmod 700 /root` 待穩跑一天後（約 2026-07-02）收**。詳見 [docs/claude-cli-primary-design.md](docs/claude-cli-primary-design.md)
 
 ## 技術架構
 
@@ -91,7 +91,7 @@ docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 - **AI 路由（預設 claude-cli-only）**：預設 `AI_PROVIDER=claude-cli` 只走 claude -p CLI、**無 fallback**（掛掉該餐直接「分析失敗」，靠手動記錄逃生）。`AI_PROVIDER=gemini` 才有 fallback 鏈（Gemini API → claude -p CLI）；`AI_PROVIDER=claude` 直接走 Claude API（無 fallback）
 - **claude -p CLI**：透過 subprocess 呼叫 VPS 上的 Claude Code CLI，走 Max 訂閱零費用。`--model` 由 `CLAUDE_CLI_MODEL`（預設 `sonnet` 別名）帶入，有圖片時加 `--allowedTools Read`，timeout 60s
 - **ai_provider 追蹤**：meals 表 `ai_provider` 欄位記錄判讀來源（gemini/claude-cli/claude-api/null），週報依 provider 分組計費
-- **ai_model 追蹤**：meals 表 `ai_model` 欄位記錄實際使用的模型名稱（如 `claude-opus-4-7`），目前只在 claude-cli 路徑寫入（從 stdout JSON envelope 的 `modelUsage` 欄位解析），稽核用途。2026-04-09 API key 洩漏事件衍生
+- **ai_model 追蹤**：meals 表 `ai_model` 欄位記錄實際判讀模型名（如 `claude-sonnet-5`），claude-cli 路徑寫入（即時記錄 + `/b` 補記皆寫）。從 stdout JSON envelope 的 `modelUsage` 解析——**新版 CLI（≥2.1.197）會混入內部小模型（haiku），故取 token 用量最大的主判讀模型，不能取第一個 key**（舊版單 key 時 `next(iter())` 剛好對，升級後會誤記成 haiku）。稽核用途，2026-04-09 API key 洩漏事件衍生
 - **Gemini JSON mode**：response_mime_type + response_json_schema 強制合法 JSON 輸出
 - **Claude JSON 容錯**：parse_ai_response 處理 code fence、畸形 JSON (如 `>` 替代 `:`)、confidence 數字→字串轉換
 - **圖片 24 小時過期**：暫存 data/media/，排程清理
