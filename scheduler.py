@@ -295,8 +295,27 @@ async def cleanup_expired_images(app: Application):
     logger.info("Cleaned up %d expired images", len(expired))
 
 
+UPDATE_REMINDER_TEXT = """每月 claude binary 更新提醒。把下面整段貼給一個能 SSH 到 VPS 的 Claude Code session：
+
+————
+更新 calorie-bot VPS（root@107.175.30.172）上 botuser 的 claude binary 並驗證，唯讀報告、不要 restart bot：
+1. 記更新前版本：ssh root@107.175.30.172 "sudo -u botuser /home/botuser/.local/bin/claude --version"
+2. 更新：同上路徑 claude update
+3. smoke（文字）：claude -p 'ping, 回簡短 JSON' --model sonnet --output-format json，確認回得出 result/modelUsage
+   若 data/media 有現存圖，順手測圖片路徑：... -p '描述這張圖：<路徑>' --model sonnet --output-format json --allowedTools Read；沒有就略過（下一餐真實照片會驗）
+4. 記新版本 + `--model sonnet` 現在解析到的模型（modelUsage 的 key），跟舊版比對有無跳版
+5. prune ~/.local/share/claude/versions/ 保留最新 2 版、刪其餘
+6. 回報：舊版→新版、模型有無變化、smoke 過否。binary 換版下次 claude -p 自動生效，不需 restart。
+————"""
+
+
+async def monthly_update_reminder(app):
+    """每月 1 號提醒手動更新 claude binary（只送訊息，無 subprocess、無失敗模式）。"""
+    await app.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=UPDATE_REMINDER_TEXT)
+
+
 def setup_scheduler(app: Application) -> AsyncIOScheduler:
-    """設定排程：每日推播 + 週報 + 照片清理。"""
+    """設定排程：每日推播 + 週報 + 照片清理 + COROS 同步 + 每月 claude 更新提醒。"""
     scheduler = AsyncIOScheduler(timezone="Asia/Taipei")
 
     scheduler.add_job(
@@ -355,9 +374,19 @@ def setup_scheduler(app: Application) -> AsyncIOScheduler:
         id="sync_coros_weight",
     )
 
+    scheduler.add_job(
+        monthly_update_reminder,
+        "cron",
+        day=1,
+        hour=10,
+        minute=30,
+        args=[app],
+        id="update_reminder",
+    )
+
     scheduler.start()
     logger.info(
-        "Scheduler started: daily summary at %d:00, API report Mon %d:05, nutrition report Mon %d:10, image cleanup at 03:00, COROS TDEE sync at 03:05, COROS weight sync at 10:29/22:29",
+        "Scheduler started: daily summary at %d:00, API report Mon %d:05, nutrition report Mon %d:10, image cleanup at 03:00, COROS TDEE sync at 03:05, COROS weight sync at 10:29/22:29, claude update reminder on day 1 at 10:30",
         PUSH_HOUR,
         PUSH_HOUR,
         PUSH_HOUR,
