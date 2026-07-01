@@ -108,9 +108,9 @@ async def _process_food(
     total_cal = sum(m["calories"] for m in today_meals)
 
     # 組合回覆
-    provider_tag = " ⚡ Claude CLI" if result.provider == "claude-cli" else ""
+    model_tag = f" · {result.ai_model}" if result.ai_model else ""
     lines = [
-        f"記錄完成{provider_tag}",
+        f"記錄完成{model_tag}",
         f"🍱 {result.description}",
         f"熱量：{_format_number(result.calories)} kcal",
         *format_macros(result.protein_g, result.carbs_g, result.fat_g),
