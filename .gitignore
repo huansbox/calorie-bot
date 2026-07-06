@@ -7,3 +7,4 @@ data/media/*
 data/coros-token.json
 tmp/
 .python-version
+.playwright-mcp/
