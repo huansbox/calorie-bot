@@ -66,6 +66,7 @@ tests/
   test_dates.py      # parse_mmdd 測試 (8 cases，含退一年邏輯)
   test_format.py     # format_meal_groups 測試 (8 cases，強制餐別與空 placeholder)
 docs/                # 設計探索文件（如 cli-model-tracking-design.md）
+wiki/                # GitHub wiki 頁面（唯一編輯處，CI 自動發佈到 .wiki.git）
 ```
 
 ## 開發慣例
@@ -76,6 +77,7 @@ docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 - Windows 開發環境需設 PYTHONIOENCODING=utf-8
 - 本機啟動: `op run --env-file .env -- python main.py`（需 1Password 桌面 App 解鎖）
 - DB 查詢凡有 ORDER BY，必須包含唯一欄位（如 `id`）作為 tie-breaker，避免同 timestamp 排序不確定
+- `wiki/` + `.github/workflows/publish-wiki.yml` = GitHub wiki 唯一編輯處，CI 自動發佈到 `.wiki.git`，不要在網頁上編輯。穩定頁（Home/Maintenance）跟機制變更的 PR 順手改；快照頁（Plan/Roadmap/Tech-Debt）標快照日期，milestone 或每月用 /repo-wiki refresh 刷新
 
 ## 關鍵設計決策
 
