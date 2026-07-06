@@ -225,6 +225,35 @@ class TestClaudeCliModelArg:
         j = cmd.index("--allowedTools")
         assert cmd[j + 1] == "Read"
 
+    def test_system_prompt_in_append_flag_not_in_p(self, monkeypatch):
+        """指令/資料分離：SYSTEM_PROMPT 走 --append-system-prompt，-p 只放使用者輸入。"""
+        cmd, _ = self._run_and_capture(monkeypatch)
+        i = cmd.index("--append-system-prompt")
+        assert cmd[i + 1] == services.ai.SYSTEM_PROMPT
+        p = cmd.index("-p")
+        assert services.ai.SYSTEM_PROMPT not in cmd[p + 1]
+        assert "滷肉飯" in cmd[p + 1]
+
+    def test_image_path_in_p_prompt(self, monkeypatch):
+        cmd, _ = self._run_and_capture(monkeypatch, image_path="/tmp/fake.jpg")
+        p = cmd.index("-p")
+        assert "fake.jpg" in cmd[p + 1]
+        assert services.ai.SYSTEM_PROMPT not in cmd[p + 1]
+
+    def test_leading_dash_text_framed(self, monkeypatch):
+        """使用者文字以 - 開頭時，-p 引數不得以 - 開頭（避免被 CLI 當 option 解析）。"""
+        captured = {}
+
+        async def fake_exec(*cmd, **kwargs):
+            captured["cmd"] = cmd
+            return _FakeProc()
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+        asyncio.run(_analyze_claude_cli(text="-18度C冰淇淋 x2"))
+        p = captured["cmd"].index("-p")
+        assert not captured["cmd"][p + 1].startswith("-")
+        assert "-18度C冰淇淋" in captured["cmd"][p + 1]
+
 
 class _FakeProcMultiModel:
     """新版 CLI 的 modelUsage 併入內部 haiku（第一個 key），主判讀模型 token 較大。"""

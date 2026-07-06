@@ -278,17 +278,21 @@ async def _analyze_claude_cli(
     import asyncio
     import os
 
-    prompt_parts = [SYSTEM_PROMPT, "\n\n---\n\n"]
-    if text:
-        prompt_parts.append(f"使用者輸入：{text}")
-    if image_path:
-        abs_path = os.path.abspath(image_path)
-        prompt_parts.append(f"\n請讀取並分析這張食物照片：{abs_path}")
     if not text and not image_path:
         raise ValueError("至少需要提供文字或照片")
 
+    user_parts = []
+    if text:
+        # 前綴確保 -p 引數不以 "-" 開頭（如「-18度C」），避免被 CLI 當 option 解析
+        user_parts.append(f"使用者輸入：{text}")
+    if image_path:
+        abs_path = os.path.abspath(image_path)
+        user_parts.append(f"請讀取並分析這張食物照片：{abs_path}")
+
+    # 指令/資料分離：SYSTEM_PROMPT 走 --append-system-prompt，-p 只放使用者輸入
     cmd = [
-        CLAUDE_CLI_PATH, "-p", "".join(prompt_parts),
+        CLAUDE_CLI_PATH, "-p", "\n".join(user_parts),
+        "--append-system-prompt", SYSTEM_PROMPT,
         "--output-format", "json", "--model", CLAUDE_CLI_MODEL,
     ]
     if image_path:
