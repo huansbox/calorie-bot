@@ -6,7 +6,7 @@
 
 ## 進行中的設計
 
-- **Prompt v2（Sonnet 適配）+ 品牌數值策略**（討論中，2026-07-06 起）：換模型體檢衍生。草稿 R4 已完成（經 3 視角 agent review、18 議題全數處置）：4-4-9 重算約束明寫、來源優先序四層（標示轉錄>品牌官方值>定值錨>推估）、錨點三層化（定值錨/品類區間/單位基準，品類依 911 筆品類級統計重選）。「記憶 vs 搜尋」實驗完成（自評 official 誤差 ≤9%、手搖飲無官方資料）。待辦：使用者審 R4、錨點數值查證、兩段式部署。詳見 [docs/prompt-v2-design.md](docs/prompt-v2-design.md)
+- **Prompt v2（Sonnet 適配）+ 品牌數值策略**（**R6 定稿 2026-07-06，實作中**）：換模型體檢衍生。R4 三視角 review（18 議題）→ R5 使用者逐段審定（單位基準改 macro 三元組、湯麵刪除等）→ 4-4-9 回填機制實驗通過（錨點精度 0.2%；官方值路徑須 prompt 內載明，裸記憶不可靠）→ R6 錨點 15 條 TFDA／官方查證定稿（奶精奶茶 525/435 升官方實測、白飯 C41 等 7 條調整）。待辦：feat/prompt-v2 兩 commit（invocation 搬移 → v2 文本＋code 清單 1-5）、兩段式部署各自 smoke（標示照 smoke 需使用者提供真實照片）。詳見 [docs/prompt-v2-design.md](docs/prompt-v2-design.md)
 - **claude -p 轉正 + 每月更新提醒**（**已上線 2026-07-01**）：Gemini 停用（code 保留），`claude -p` 為唯一預設路徑、`--model sonnet`（現解析為 Sonnet 5）走 `CLAUDE_CLI_MODEL` env、切 botuser 自己的 binary（2.1.96→2.1.197）、`DISABLE_AUTOUPDATER=1` + 每月 1 號 10:30 提醒手動 update、每餐回覆印實際模型。部署 smoke 抓到並修掉「2.1.197 modelUsage 混入內部 haiku」bug（取 token 最大主模型）。`chmod 700 /root` 已於 2026-07-06 收（botuser 實跑 claude -p smoke 通過 + 反向驗證進不去 /root），**全案完結**。詳見 [docs/claude-cli-primary-design.md](docs/claude-cli-primary-design.md)
 
 ## 技術架構
