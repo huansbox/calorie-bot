@@ -30,6 +30,7 @@ def insert_meal(
     recorded_at: str | None = None,
     ai_provider: str | None = None,
     ai_model: str | None = None,
+    note: str | None = None,
 ) -> dict:
     """新增一筆飲食記錄，回傳插入的 row。"""
     row = {
@@ -54,6 +55,8 @@ def insert_meal(
         row["ai_provider"] = ai_provider
     if ai_model is not None:
         row["ai_model"] = ai_model
+    if note:  # 空字串不落庫，維持 NULL＝無 basis 資訊
+        row["note"] = note
     result = supabase.table("meals").insert(row).execute()
     logger.info("Inserted meal: %s", result.data[0]["id"])
     return result.data[0]

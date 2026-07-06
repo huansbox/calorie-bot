@@ -152,7 +152,7 @@
 | # | 議題（視角） | 處置 |
 |---|---|---|
 | 1 | 無容量歷史打法（「50嵐奶茶半糖」）不命中定值錨「700cc」規格——v2 動機案例可能漏網；機制實驗只測過含 700cc 的輸入（prompt＋產品雙命中，產品列 major） | 採納：定值錨段補「手搖飲未註明容量時以 700cc 計」；Commit 2 smoke 用歷史原句實測 |
-| 2 | note 宣告「供校正係數機讀」但從未落庫（meals 表無 note 欄），v2 起累積的校正資料無法回溯分類 basis；緩辦議題 #17 的「DB 保留原文」前提錯誤（產品 major） | **待使用者決策**（見尚待決定） |
+| 2 | note 宣告「供校正係數機讀」但從未落庫（meals 表無 note 欄），v2 起累積的校正資料無法回溯分類 basis；緩辦議題 #17 的「DB 保留原文」前提錯誤（產品 major） | 採納（使用者拍板 A）：meals 加 `note` 欄（nullable，migration 已對 prod 執行）＋ AI 兩路徑 insert 落庫；空 note 存 NULL；手動/快取路徑維持 NULL |
 | 3 | `-p` argv 以原始使用者文字開頭，leading dash（如「-18度C」）會被 CLI 當 option 攔截、該餐分析失敗——Commit 1 新引入的 user-input→argv 系統邊界（落地 minor） | 採納：恢復「使用者輸入：」前綴＋leading-dash 測試，併回 Commit 1 |
 | 4 | 迴轉壽司範例碳水單項矛盾：醋飯 430g 按自家單位基準即 C176 > 範例總 C170（prompt minor） | 採納：note 改 400g（400g×C41≈164＋醋糖≈170 自洽），macros 不動 |
 | 5 | 定值錨「（TFDA 現調手搖實測值）」括註與「官方資訊用官方值：」規則張力；note 合規實驗做在無括註的 R5 文本上（prompt minor） | 採納：prompt 拿掉括註（出處留本文件）；smoke 驗 note 前綴 |
@@ -339,8 +339,7 @@ cmd = [
 
 ## 尚待決定
 
-- **note 是否落庫（R7 review #2，待使用者決策）**：meals 表無 note 欄位，note 只存在 Telegram 訊息中——「note 關鍵字供校正係數機讀」目前無資料路徑。選項 A：加 `meals.note` 欄（nullable，forward-only migration）＋ insert 落庫；選項 B：記錄為有意識缺口，校正係數開工時再升級 schema（其前的筆無 basis 可分類）。
-- **basis 是否升級為 schema 欄位**：現走 note 關鍵字 + parse soft-check；校正係數屆時需要結構化欄位再升級（若上條選 A，note 原文已落庫，屆時可回溯解析）。
+- **basis 是否升級為 schema 欄位**：現走 note 關鍵字 + parse soft-check；校正係數屆時需要結構化欄位再升級（note 原文已落庫——R7 review #2 使用者拍板選 A，屆時可回溯解析）。
 - **`--append-system-prompt` 實測**（Commit 1 smoke 涵蓋）。
 - **營養標示照片實測**（需真實標示照）。
 - 已知缺口記錄：修正按鈕覆寫後 note 仍為原「推估：」內容，校正係數屆時需排除人工修正筆（見 review #16）。
@@ -392,4 +391,5 @@ cmd = [
 - 2026-07-06 R5：使用者逐段審閱完成（4 段）。定值錨照案通過（接受記錄基準上移；奶精奶茶 530/450 溯源最弱列查證最優先）；品類區間刪湯麵（使用者少吃）、「原味蛋餅加蛋」改「原味蛋餅：250–320」；單位基準改 macro 三元組（錨點單位跟來源強度走：TFDA 有完整 macros 的層用 macros，只有 kcal 的層留 kcal＋回填）、蘋果／芭樂拆條、手掌 10×9cm 實測確認；優先序第 4 層補精確克數路由；定值錨 note 標法補定（「推估：」開頭＋註明命中定值錨，供未來校正係數排除錨點筆）；「標示轉錄：」有意識不加範例（留 Commit 2 標示照 smoke 驗）。新增 4-4-9 回填機制小實驗，與錨點數值查證並行。
 - 2026-07-06 機制實驗：4-4-9 回填承重假設驗證通過（錨點精度 0.2%、單位基準組合確定化）；發現官方值路徑對記憶弱品牌 3/3 保守棄用、範例在場則 3/3 穩定命中——高頻品牌一致性須靠 prompt 內載明（範例／定值錨）或 food_cache（詳見實驗段）。
 - 2026-07-06 R6 定稿：agent 查證 15 條錨點數值（TFDA／官方／具名營養師）。調整 7 條：奶精奶茶 525/435（TFDA 現調實測，來源升官方）、便當 800–950、牛肉麵 600–900、麻醬麵 500–650、蛋餅 230–300、厚片 320–420、紅豆餅 160–230；白飯 C 34→41（TFDA，唯一實質偏差 +18%）、蘋果微調；範例連動修正（滷肉飯 ≈630、迴轉壽司 ≈1272）。結構性發現：奶精奶茶舊拆解錯誤（基底 370＋糖 40g，實為基底 ~300＋糖 60g）為半糖偏高根因；TFDA 手搖樣品去冰屬上限錨。定稿，進入實作。
-- 2026-07-06 R7：實作完成（feat/prompt-v2 兩 commits，測試 200→206）後，3 agents 三視角 review 實作，11 條 findings（2 major）——6 採納修訂（含 leading-dash argv 邊界、無容量打法補預設規格）、4 記錄、1 待使用者決策（note 落庫）。修正以 amend 併回對應 commit，維持失效軸分離。
+- 2026-07-06 R7：實作完成（feat/prompt-v2 兩 commits）後，3 agents 三視角 review 實作，11 條 findings（2 major）——6 採納修訂（含 leading-dash argv 邊界、無容量打法補預設規格）、4 記錄、1 交使用者決策。修正以 amend 併回對應 commit，維持失效軸分離。
+- 2026-07-06 note 落庫拍板：使用者選 A——meals 加 `note` text 欄（nullable，`add_note_to_meals` migration 已對 prod 執行、script 留 scripts/），AI 即時與 /b 補記兩路徑 insert 落庫，為校正係數保存 basis 分類依據。branch 第 3 個 commit。
