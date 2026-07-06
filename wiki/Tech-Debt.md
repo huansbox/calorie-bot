@@ -35,5 +35,5 @@
 ## 歷史償還紀錄
 
 - 2026-07-01（commit `97755c7`）：修掉「CLI ≥ 2.1.197 `modelUsage` 混入內部 haiku 導致 `ai_model` 誤記」——部署 smoke 當場抓到。
-- 2026-07-01：收掉「botuser 憑證 × root binary」安裝順序留下的意外耦合——bot 改用 botuser 自己的 claude binary，`/root` 權限放寬得以還原。
+- 2026-07-01：收掉「botuser 憑證 × root binary」安裝順序留下的意外耦合——bot 改用 botuser 自己的 claude binary；2026-07-06 執行 `chmod 700 /root` 完成權限還原。
 - 2026-06-01：weight_logs 同日多筆壓成一天一筆——`log_date` UNIQUE migration（forward-only，已對 prod 執行），所有寫入改 upsert。

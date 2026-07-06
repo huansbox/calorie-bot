@@ -15,7 +15,7 @@
 
 ## 進行中主軸
 
-claude-cli-only 運行觀察期：上線首週確認週報照發、模型標籤穩定，並收掉最後一步部署收尾（`chmod 700 /root`）。逐項狀態見 [Plan](Plan)，設計全文見 [docs/claude-cli-primary-design.md](https://github.com/huansbox/calorie-bot/blob/main/docs/claude-cli-primary-design.md)。
+claude-cli-only 運行觀察期：上線首週確認週報照發、模型標籤穩定；部署收尾（`chmod 700 /root`）已於 2026-07-06 收掉，全案完結。逐項狀態見 [Plan](Plan)，設計全文見 [docs/claude-cli-primary-design.md](https://github.com/huansbox/calorie-bot/blob/main/docs/claude-cli-primary-design.md)。
 
 ## 未來方向（尚未排程）
 
