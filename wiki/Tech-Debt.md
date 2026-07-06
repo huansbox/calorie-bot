@@ -24,6 +24,7 @@
 | `ai_confidence` 欄位無效【接受現狀】 | DB 冗欄位；區分 AI vs 手動已由 `input_tokens=0` 取代 | 觀察期結束後移除欄位 |
 | op zombie process【接受現狀】 | 1 個 PID entry，零 CPU/RAM；每次看 process list 會困惑一下 | 明文決定不修（根治代價 > 收益），見 CLAUDE.md「已知無害現象」 |
 | `/b` 補記餐點修正後累計顯示今天而非補記日【接受現狀】 | 修正補記餐點時累計行語意不準 | 已加註記提示；使用頻率極低，不投資 |
+| 修正按鈕覆寫營養素後 `note` 仍為原「推估：」內容【接受現狀】 | 校正係數若不排除人工修正筆，校正資料會誤含人工值 | 修正功能幾乎未用；AI 校正係數開工時一併處理（prompt v2 實作 review #16），見 [docs/prompt-v2-design.md](https://github.com/huansbox/calorie-bot/blob/main/docs/prompt-v2-design.md) |
 
 ## 記帳原則
 
@@ -34,6 +35,7 @@
 
 ## 歷史償還紀錄
 
+- 2026-07-06：補上「note 關鍵字宣稱供機讀、卻無資料路徑」缺口——`meals.note` 欄位落庫（prompt v2 實作 review #2 抓到；forward-only migration `scripts/migrate_meals_add_note.sql` 已對 prod 執行）。
 - 2026-07-01（commit `97755c7`）：修掉「CLI ≥ 2.1.197 `modelUsage` 混入內部 haiku 導致 `ai_model` 誤記」——部署 smoke 當場抓到。
 - 2026-07-01：收掉「botuser 憑證 × root binary」安裝順序留下的意外耦合——bot 改用 botuser 自己的 claude binary；2026-07-06 執行 `chmod 700 /root` 完成權限還原。
 - 2026-06-01：weight_logs 同日多筆壓成一天一筆——`log_date` UNIQUE migration（forward-only，已對 prod 執行），所有寫入改 upsert。

@@ -47,7 +47,7 @@ ssh root@107.175.30.172 "cd /home/botuser/calorie-bot && sudo -u botuser git pul
 - **COROS refresh_token rotation**：每次 refresh 都換新 token、舊的立即失效。`services/coros_mcp.py` 以 atomic write（tmp file + rename）寫回、`save → fetch` 順序確保 refresh 成功先持久化。動這段前務必讀 CLAUDE.md 關鍵設計決策段；token 檔壞掉要重跑 bootstrap。
 - **claude CLI `modelUsage` 混入內部小模型**：CLI ≥ 2.1.197 的 stdout envelope 會混入內部 haiku，`ai_model` 必須取 token 用量最大的主模型、不能取第一個 key（舊版單 key 時剛好對，升級後會誤記）。出處：commit `97755c7`、CLAUDE.md「ai_model 追蹤」。
 - **`--model` 別名解析 baked 進 binary 版本**：`--model sonnet` 只給「這顆 binary 知道的最新 sonnet」，更新 binary 可能讓模型跳版（如 sonnet-4-6 → Sonnet 5）。出處：[docs/claude-cli-primary-design.md](https://github.com/huansbox/calorie-bot/blob/main/docs/claude-cli-primary-design.md)。
-- **weight_logs migration 是 forward-only**：`scripts/migrate_weight_logs_log_date.sql` 已對 prod 執行過，不可重跑。
+- **DB migrations 是 forward-only**：`scripts/migrate_weight_logs_log_date.sql` 與 `scripts/migrate_meals_add_note.sql` 都已對 prod 執行過，不可重跑。
 
 **決策面**（看起來像 bug 但是刻意設計，不要「好心」修掉）：
 
