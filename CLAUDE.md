@@ -6,6 +6,7 @@
 
 ## 進行中的設計
 
+- **Prompt v2（Sonnet 適配）+ 品牌數值策略**（討論中，2026-07-06 起）：換模型體檢衍生。已對齊：`--append-system-prompt` 指令分離、營養標示照轉錄、品牌官方值優先規則、錨點品類依實際高頻重選（記錄選品類、不用記錄定值——循環論證）、confidence 保留壓縮。「記憶 vs 搜尋」實驗已完成（模型自評 official 者誤差 ≤9%、手搖飲無官方資料需自定錨）。詳見 [docs/prompt-v2-design.md](docs/prompt-v2-design.md)
 - **claude -p 轉正 + 每月更新提醒**（**已上線 2026-07-01**）：Gemini 停用（code 保留），`claude -p` 為唯一預設路徑、`--model sonnet`（現解析為 Sonnet 5）走 `CLAUDE_CLI_MODEL` env、切 botuser 自己的 binary（2.1.96→2.1.197）、`DISABLE_AUTOUPDATER=1` + 每月 1 號 10:30 提醒手動 update、每餐回覆印實際模型。部署 smoke 抓到並修掉「2.1.197 modelUsage 混入內部 haiku」bug（取 token 最大主模型）。`chmod 700 /root` 已於 2026-07-06 收（botuser 實跑 claude -p smoke 通過 + 反向驗證進不去 /root），**全案完結**。詳見 [docs/claude-cli-primary-design.md](docs/claude-cli-primary-design.md)
 
 ## 技術架構
