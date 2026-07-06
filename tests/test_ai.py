@@ -92,6 +92,39 @@ class TestParseAiResponse:
         assert result.confidence == "low"
 
 
+class TestNoteSoftCheck:
+    def test_compliant_note_no_warning(self, caplog):
+        raw = '{"description":"奶茶","protein_g":1.0,"carbs_g":80.0,"fat_g":14.0,"confidence":"high","note":"推估：命中定值錨 700cc 奶精奶茶半糖 435 kcal"}'
+        with caplog.at_level("WARNING", logger="services.ai"):
+            result = parse_ai_response(raw)
+        assert result.note.startswith("推估：")
+        assert "note 未以標準關鍵字開頭" not in caplog.text
+
+    def test_noncompliant_note_warns_but_passes(self, caplog):
+        raw = '{"description":"奶茶","protein_g":1.0,"carbs_g":80.0,"fat_g":14.0,"confidence":"high","note":"大概是半糖的量"}'
+        with caplog.at_level("WARNING", logger="services.ai"):
+            result = parse_ai_response(raw)
+        assert result.note == "大概是半糖的量"  # 不擋不改值
+        assert "note 未以標準關鍵字開頭" in caplog.text
+
+    def test_official_long_note_passthrough(self):
+        long_note = "官方值：CITY CAFE 官方熱量標示 188 kcal，三大營養素依全脂鮮奶拿鐵比例回填。" + "補充說明" * 60
+        raw = json.dumps(
+            {"description": "7-11 CITY CAFE 大杯冰拿鐵", "protein_g": 10.0, "carbs_g": 15.0,
+             "fat_g": 10.0, "confidence": "high", "note": long_note},
+            ensure_ascii=False,
+        )
+        result = parse_ai_response(raw)
+        assert result.note == long_note
+        assert result.calories == 190  # 10×4 + 15×4 + 10×9
+
+    def test_leading_text_json_extracted(self):
+        raw = '以下是分析結果：\n{"description":"滷肉飯","protein_g":28.0,"carbs_g":88.0,"fat_g":20.0,"confidence":"high","note":"推估：白飯+滷肉"}'
+        result = parse_ai_response(raw)
+        assert result.description == "滷肉飯"
+        assert result.calories == 644
+
+
 class TestNormalizeModelName:
     def test_strips_context_window_suffix(self):
         assert _normalize_model_name("claude-opus-4-7[1m]") == "claude-opus-4-7"

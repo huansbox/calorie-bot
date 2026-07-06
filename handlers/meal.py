@@ -121,7 +121,7 @@ async def _process_food(
 
     if result.confidence == "low":
         lines.append("")
-        lines.append("⚠️ 份量不確定，以一人份估算")
+        lines.append("⚠️ 低信心估算，誤差可能較大")
 
     if result.note:
         lines.append(f"📝 {result.note}")
