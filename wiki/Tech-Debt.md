@@ -14,7 +14,7 @@
 | 債 | 成本（利息） | 償還策略／條件 | 追蹤 |
 |---|---|---|---|
 | claude -p 單點依賴 + 60s timeout hardcode【接受現狀】 | CLI 掛掉或超時該餐直接「分析失敗」，需手動記錄逃生；timeout 調整要改 code | 失敗頻率變高時：timeout 提成 env 旋鈕，或接回「claude -p 主、Gemini 反向 fallback」 | [docs/claude-cli-primary-design.md](https://github.com/huansbox/calorie-bot/blob/main/docs/claude-cli-primary-design.md) watch #3/#4 |
-| API 週報以 `input_tokens > 0` 判斷有無資料 | claude-cli 某週全 cache-read 回 0 → 該週 API 週報整封不發；同一判準也用來區分 AI vs 手動記錄 | 上線首週（2026-07 第一週）觀察；真發生就改判準 | 同上 watch #2，`services/db.py` get_weekly_token_usage |
+| API 週報以 `input_tokens > 0` 判斷有無資料 | claude-cli 某週全 cache-read 回 0 → 該週 API 週報整封不發；同一判準也用來區分 AI vs 手動記錄 | 首週已驗證未觸發（2026-07-06 週報照發，31/31 claude-cli meals 有 token）；若未來某週漏發再改判準 | 同上 watch #2，`services/db.py` get_weekly_token_usage |
 
 ## 低利息（記錄在案）
 

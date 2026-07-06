@@ -9,7 +9,7 @@
 
 - ✅ 已上線：claude-cli 唯一預設路徑、`--model` 走 `CLAUDE_CLI_MODEL`、切 botuser binary、`DISABLE_AUTOUPDATER=1`、每月更新提醒、每餐印實際模型。部署 smoke 抓到並修掉「modelUsage 混入內部 haiku」bug（commit `97755c7`）。
 - ✅ **`chmod 700 /root`**（2026-07-06 收）：`/root` 權限已還原，botuser 實跑 claude -p smoke 通過、反向驗證進不去 `/root`——轉正全案完結，無待辦動手項。
-- 👀 **上線首週 watch**：確認週一 API 週報照發（`get_weekly_token_usage` 以 `input_tokens > 0` 過濾，claude-cli 全 cache-read 回 0 時該週整封不發，見 [Tech Debt](Tech-Debt)）。
+- ✅ **上線首週 watch**（2026-07-06 過）：週一 API 週報與營養週報照發（log 實證），`input_tokens > 0` 過濾邊界未觸發——上週 31 筆 claude-cli meals 全部有 token。claude -p 轉正觀察期歸檔，主戰場清空。
 
 ## 其他 active
 
