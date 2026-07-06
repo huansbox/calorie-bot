@@ -340,46 +340,22 @@ cmd = [
 ## 尚待決定
 
 - **basis 是否升級為 schema 欄位**：現走 note 關鍵字 + parse soft-check；校正係數屆時需要結構化欄位再升級（note 原文已落庫——R7 review #2 使用者拍板選 A，屆時可回溯解析）。
-- **`--append-system-prompt` 實測**（Commit 1 smoke 涵蓋）。
-- **營養標示照片實測**（需真實標示照）。
 - 已知缺口記錄：修正按鈕覆寫後 note 仍為原「推估：」內容，校正係數屆時需排除人工修正筆（見 review #16）。
 - 高頻品項驗證表是否立案（構想獲實驗支持，依賴月報，暫不立案）。
 
-## 交接（給下個 session，2026-07-06；已由接手 session 消化，R5 起續作）
+## 運行觀察交接（2026-07-06 上線後，給後續 session）
 
-本 session 完成到 R4 草稿（設計齊備、**使用者尚未審閱**）。接手順序：先審稿 → 錨點查證 → 定稿 → 實作。共識定案前不動 code。
+全案已上線（部署、smoke、/f 盤點皆完成），以下為觀察期待辦。無固定排程，每項附觸發時機與動作：
 
-### 給新 session 的起手 prompt（直接貼）
-
-```
-請接手 prompt v2 的工作（Architect 前期已完成設計討論）。
-
-1. 讀 CLAUDE.md「進行中的設計」與 docs/prompt-v2-design.md 全文——R4 草稿、
-   三視角 review 取捨、code 改動清單、實作骨架、部署順序都在文件裡。
-2. 第一步：陪我審 R4 草稿。重點帶我看【定值錨】數值與【品類校準區間】，
-   逐段讓我確認或修改，結論更新回文件（討論紀錄加 R5）。
-3. 審完後：發 agent 查證錨點數值（TFDA／官方來源；「尚待決定」段有清單），
-   查證結果連同來源更新進文件，定稿。
-4. 定稿後實作：開 feat/prompt-v2 branch，按文件「部署順序」拆兩個 commit
-   （Commit 1 = invocation 搬移、v1 文本不動；Commit 2 = v2 文本 + code 改動
-   清單 1-5），測試按清單第 5 點補。
-5. 部署走兩段式、各自 smoke（文件「部署順序」有 smoke 清單）；部署指令在
-   CLAUDE.md「部署」段。
-
-前置條件與提醒：
-- Base branch: main（設計文件已在 main，工作區乾淨）
-- 測試指令：uv run pytest tests/ -v（Windows 需 PYTHONIOENCODING=utf-8）
-- 錨點數值不可用使用者歷史記錄反推（循環論證，文件有記錄原因）
-- VPS 實作前先確認 botuser 的 claude 2.1.197 支援 --append-system-prompt
-  （ssh 後 sudo -u botuser claude --help）
-- 營養標示照 smoke 需使用者提供一張真實標示照
-
-完成後回報格式：
-- Branch / Commits 數
-- 測試：pass/fail + 未通過項
-- smoke：Commit 1（文字/照片/envelope）、Commit 2（品牌文字/食物照/標示照）結果
-- 未解決：有/無 + 說明
-```
+1. **note 關鍵字遵守率**（建議上線一週後看一次）：
+   - log：`ssh root@107.175.30.172 "journalctl -u calorie-bot --since '2026-07-06' --no-pager | grep 'note 未以標準關鍵字開頭'"`
+   - DB 分佈：`SELECT left(note, 4) AS prefix, count(*) FROM meals WHERE note IS NOT NULL GROUP BY 1;`
+   - 不合規率 >10% 才需要動作（檢視樣態 → prompt 補強或 parse 容錯）；smoke 期 4/4 合規。
+2. **部署當週週報台階**（2026-07-13 週一 08:05／08:10 推播）：「週對週」攝取跳增與「體重預估 vs 實際」偏移屬預期（白飯基準 +18%、奶茶錨上移），不是 bug，不用修。校正係數上線前不處理。
+3. **天仁鮮奶茶 vs 錨點 280**：天仁官方全糖 362 反推 3 分糖 ~215–242，v2 錨「鮮奶茶 3 分糖 280」對天仁偏高。使用者平常走快取（238）無實害；若散裝「鮮奶茶」文字輸入變多，考慮錨點下修 ~250（改 prompt 一行）。
+4. **快取維護兩備忘**：舒跑買到新配方（瓶身糖量少 10%）時照標示更新快取；amino vital 若改吃台灣通路 Perfect Energy（174 kcal/130g）應建新快取，不是改舊值。
+5. **校正係數開工前置**（資料滿 6–8 週，約 2026-08 下旬）：`meals.note` 自 2026-07-06 起有 basis 可分類——「官方值：」「標示轉錄：」與 note 含「定值錨」字樣者屬釘死值不校正，「推估：」才進校正池；需排除人工修正筆（修正按鈕覆寫後 note 是 stale 原文，review #16 已記）與手動/快取筆（`input_tokens=0`）。屆時先讀本文件「尚待決定」段。
+6. **月報 → 高頻品項驗證表**：順序 prompt v2 ✅ → 月報（資料滿 2 個月）→ 驗證表（構想段有機制草圖：動態注入 + AI 模糊匹配）。
 
 ## 討論紀錄
 

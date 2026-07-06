@@ -6,8 +6,8 @@
 
 ## 進行中的設計
 
-- **Prompt v2（Sonnet 適配）+ 品牌數值策略**（**已上線 2026-07-06**）：R4 三視角設計 review → R5 使用者逐段審定 → 4-4-9 回填機制實驗（錨點精度 0.2%）→ R6 錨點 15 條 TFDA／官方查證 → 實作 → 實作三視角 review（R7，11 條 findings，含 leading-dash argv 邊界與無容量打法補預設）→ 兩段式部署 smoke 全過（官方值／定值錨／推估／標示轉錄四情境 note 關鍵字 4/4 命中；「50嵐奶茶半糖」歷史原句命中 700cc 預設鎖 435）。隨案新增 `meals.note` 落庫（校正係數 basis 分類用）。運行觀察：note 關鍵字遵守率（soft-check warning）、部署當週週報含基準台階屬預期、/f 盤點舊快取項與 v2 錨點脫節者。詳見 [docs/prompt-v2-design.md](docs/prompt-v2-design.md)
-- **claude -p 轉正 + 每月更新提醒**（**已上線 2026-07-01**）：Gemini 停用（code 保留），`claude -p` 為唯一預設路徑、`--model sonnet`（現解析為 Sonnet 5）走 `CLAUDE_CLI_MODEL` env、切 botuser 自己的 binary（2.1.96→2.1.197）、`DISABLE_AUTOUPDATER=1` + 每月 1 號 10:30 提醒手動 update、每餐回覆印實際模型。部署 smoke 抓到並修掉「2.1.197 modelUsage 混入內部 haiku」bug（取 token 最大主模型）。`chmod 700 /root` 已於 2026-07-06 收（botuser 實跑 claude -p smoke 通過 + 反向驗證進不去 /root），**全案完結**。詳見 [docs/claude-cli-primary-design.md](docs/claude-cli-primary-design.md)
+- **Prompt v2（Sonnet 適配）+ 品牌數值策略**（**已上線 2026-07-06，觀察期**）：R4 三視角設計 review → R5 使用者逐段審定 → 4-4-9 回填機制實驗（錨點精度 0.2%）→ R6 錨點 15 條 TFDA／官方查證 → 實作三視角 review（R7）→ 兩段式部署 smoke 全過（四種 note 情境 4/4 命中；「50嵐奶茶半糖」歷史原句命中 700cc 預設鎖 435）→ /f 快取盤點 17 項對齊新錨點（更新 4：芝麻麻糬、8冰綠、Subway、星巴克採台灣官方最高值口徑）。隨案新增 `meals.note` 落庫（校正係數 basis 分類用）。**後續觀察清單（note 遵守率、7/13 週報台階屬預期、天仁錨點適配、快取備忘、校正係數前置）見 [docs/prompt-v2-design.md](docs/prompt-v2-design.md)「運行觀察交接」段**
+- **claude -p 轉正 + 每月更新提醒**（已上線 2026-07-01，**全案完結**）：`claude -p` 唯一預設路徑（Gemini 停用、code 保留）、`--model sonnet`（現解析 Sonnet 5）、`DISABLE_AUTOUPDATER=1` + 每月 1 號 10:30 提醒手動 update、每餐回覆印實際模型。詳見 [docs/claude-cli-primary-design.md](docs/claude-cli-primary-design.md)
 
 ## 技術架構
 
