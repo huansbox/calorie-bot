@@ -210,7 +210,7 @@ async def _analyze_gemini(
 
     logger.info("Calling Gemini API for food analysis")
     response = client.models.generate_content(
-        model="gemini-2.5-pro",
+        model="gemini-3.1-pro-preview",
         contents=contents,
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,

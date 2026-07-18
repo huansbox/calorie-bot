@@ -116,7 +116,7 @@ async def weekly_nutrition_report(app: Application):
 
 # 費率 (USD per 1M tokens)
 _PRICING = {
-    "gemini": {"input": 1.25, "output": 10.0, "thinking": 10.0},
+    "gemini": {"input": 2.0, "output": 12.0, "thinking": 12.0},
     "claude": {"input": 3.0, "output": 15.0, "thinking": 0},
     "claude-api": {"input": 3.0, "output": 15.0, "thinking": 0},
     "claude-cli": {"input": 0, "output": 0, "thinking": 0},

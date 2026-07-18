@@ -79,6 +79,15 @@ GCP 抵免額回歸（Google Developer Program premium benefit，$319×2＋$315�
 
 多模型對照初步結果：`gemini-pro-latest` 別名實際解析到 `gemini-3.1-pro`（production 勿用別名，鎖定明確版本）；`gemini-3.5-flash`（free tier 可跑）兩發皆捏造官方權威（「標示轉錄：金車官網 28kcal/100ml」「官方值：6.7g/100ml」＋confidence high，真值 44 kcal/11.7g）——與 agy 側 Flash 同病，**不可用**。2.5-pro vs 3.1-pro-preview 對照待 billing 修復後補測（腳本留存 VPS `/tmp/gemini_model_test.py`）。
 
+### 2026-07-18 定案：`gemini-3.1-pro-preview` 上線
+
+billing 連結後補測 pro 對照（各 7 發：奧利多水×3＋全脂鮮奶100g×2＋鮭魚卵御飯糰×2，food_cache 官方值當 ground truth）：
+
+- **2.5-pro 失格**：7 發有 5 發假冒「標示轉錄／官方值」＋confidence high（含純文字輸入自稱「標示轉錄」——根本沒有照片）；奧利多 3 發全假設 150ml 玻璃瓶（疑套養樂多式小瓶印象，使用者實際喝 585ml PET）。泛用 TFDA 值（鮮奶）精準。它在 719 筆歷史的好名聲屬 prompt v1 時代（無 note 關鍵字制度，此行為無從暴露）
+- **3.1-pro-preview 勝出**：7/7 note 誠實（推估／medium，或有依據的 high）、鮮奶逐字命中 cache 真值、御飯糰 178-194（真值 220，穩定同向低估）、奧利多假設 585ml 貼合現實。thinking 用量也較低（428-706 vs 445-1996）
+- **prompt v1 對照評估後跳過**：v1→v2 確實從未 A/B 實測（只有設計 review＋部署 smoke），但關鍵指標（note 來源誠實度）v1 無比較基準、數值精度小樣本無檢定力；「v2 是否有效」由觀察期真實數據（note 遵守率、校正係數 basis）驗證。另註：「標示轉錄」詞彙的存在理由是使用者常直接拍包裝營養標示照片，非憑空設計
+- **變更**：`services/ai.py` model → `gemini-3.1-pro-preview`；`scheduler.py` `_PRICING["gemini"]` → input $2／output+thinking $12（官方定價，≤200k 分級；本 bot 請求 ~2k 遠低於門檻）；preview 下架風險由 fallback 鏈（→ claude -p）緩解
+
 ## 順帶發現（與本案無關，待查）
 
 `data/media/` 存有 2026 年 3／5／6 月舊照片，而設計為 24h 過期＋03:00 排程清理——疑似清理只刪 DB 有記錄的檔案，分析失敗等路徑產生的孤兒檔案永久殘留。

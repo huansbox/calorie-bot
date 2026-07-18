@@ -6,7 +6,7 @@
 
 ## 進行中的設計
 
-- **AI provider 品質評估（agy 探索完成，待決策）**：Sonnet 台灣品牌品項知識缺口（奧利多案例，判定為 model 非 prompt 問題）→ VPS 裝 agy CLI 1.1.4（Google AI Pro 訂閱）smoke 4/4 全過；GCP 抵免額回歸後**接回 gemini-api 為首選短路徑**，agy 留作搜尋能力選項。安裝細節、權限語法、模型對照、整合設計點見 [docs/agy-cli-exploration.md](docs/agy-cli-exploration.md)
+- **AI provider 品質評估（已定案 2026-07-18）**：Sonnet 台灣品牌品項知識缺口（奧利多案例，判定為 model 非 prompt 問題）→ VPS 裝 agy CLI smoke 4/4 全過（留作搜尋能力選項）→ GCP 抵免額回歸後**接回 gemini-api，模型對照後選定 `gemini-3.1-pro-preview`**（7/7 note 誠實；2.5-pro 與 Flash 系因假冒官方值失格）。全程記錄見 [docs/agy-cli-exploration.md](docs/agy-cli-exploration.md)
 - **Prompt v2（Sonnet 適配）+ 品牌數值策略**（**已上線 2026-07-06，觀察期**）：R4 三視角設計 review → R5 使用者逐段審定 → 4-4-9 回填機制實驗（錨點精度 0.2%）→ R6 錨點 15 條 TFDA／官方查證 → 實作三視角 review（R7）→ 兩段式部署 smoke 全過（四種 note 情境 4/4 命中；「50嵐奶茶半糖」歷史原句命中 700cc 預設鎖 435）→ /f 快取盤點 17 項對齊新錨點（更新 4：芝麻麻糬、8冰綠、Subway、星巴克採台灣官方最高值口徑）。隨案新增 `meals.note` 落庫（校正係數 basis 分類用）。**後續觀察清單（note 遵守率、7/13 週報台階屬預期、天仁錨點適配、快取備忘、校正係數前置）見 [docs/prompt-v2-design.md](docs/prompt-v2-design.md)「運行觀察交接」段**
 - **claude -p 轉正 + 每月更新提醒**（已上線 2026-07-01，**全案完結**）：`claude -p` 唯一預設路徑（Gemini 停用、code 保留）、`--model sonnet`（現解析 Sonnet 5）、`DISABLE_AUTOUPDATER=1` + 每月 1 號 10:30 提醒手動 update、每餐回覆印實際模型。詳見 [docs/claude-cli-primary-design.md](docs/claude-cli-primary-design.md)
 
@@ -15,9 +15,9 @@
 - **語言**: Python 3.12
 - **套件管理**: uv
 - **Bot 框架**: python-telegram-bot v22 (polling 模式，HTTPXRequest 自訂 timeout: read/write 20s, connect 10s)
-- **AI**: claude -p CLI 為預設唯一路徑；Gemini / Claude API 保留可切換（`AI_PROVIDER`）
-  - claude -p CLI (預設，`AI_PROVIDER=claude-cli`，走 Max 訂閱零費用，透過 subprocess 呼叫，`--model` 由 `CLAUDE_CLI_MODEL` 控制，預設 `sonnet`)
-  - Gemini 2.5 Pro (`AI_PROVIDER=gemini`，JSON mode 強制合法輸出，失敗時仍 fallback claude -p)
+- **AI**: Gemini API 為現行路徑（2026-07-18 切換），失敗時 fallback claude -p CLI；可切換（`AI_PROVIDER`）
+  - Gemini 3.1 Pro Preview (現行預設，`AI_PROVIDER=gemini`，JSON mode 強制合法輸出，失敗時 fallback claude -p，費用由 GCP 抵免額覆蓋至 2027-07)
+  - claude -p CLI (`AI_PROVIDER=claude-cli`，走 Max 訂閱零費用，透過 subprocess 呼叫，`--model` 由 `CLAUDE_CLI_MODEL` 控制，預設 `sonnet`)
   - Claude Sonnet 4.6 API (`AI_PROVIDER=claude`，無 fallback)
 - **資料庫**: Supabase (PostgreSQL) — meals（含 ai_provider / ai_model / note 欄位）, weight_logs（log_date UNIQUE + source，一天一筆）, daily_tdee, food_cache 四張表，全部啟用 RLS，使用 Secret Key 繞過
 - **排程**: APScheduler (AsyncIOScheduler) — 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理 + 03:05 COROS TDEE 同步 + 10:29/22:29 COROS 體重同步 + 每月 1 號 10:30 claude 更新提醒
@@ -92,7 +92,7 @@ wiki/                # GitHub wiki 頁面（唯一編輯處，CI 自動發佈到
 - **COROS token rotation**：refresh_token 每次 refresh 都換新，舊的失效。`services/coros_mcp.py` 用 atomic write (tmp file + rename) 寫回避免半成品。`save → fetch` 順序確保 refresh 成功就先持久化，即使 MCP call 失敗下次仍能用
 - **COROS 體重自動同步**：每日 10:29（主）+ 22:29（fallback）`queryUserInfo` 抓 profile 當前體重 → `decide_weight_sync` 純函式決策 → upsert `weight_logs`。**走「日期路線」**：profile 體重無時間戳，無法區分「同重」與「沒量」，故只要當天沒筆就寫（接受偶爾寫沿用舊值的假點，換零紀律），`/w` 是假點修正出口。fill-missing-only（當天已有筆→SKIP，故 fallback 自動成立、晨重優先）。決策真值表：當天有筆→SKIP；抓不到→告警不寫；無基準→寫；跳變 >3kg（含離譜壞值）→告警不寫；值同上次→寫+輕提醒；正常→靜默寫。**token 不自己 refresh**，沿用 03:05 `sync_coros_tdee` rotate 過的 access_token（US22，rotation 風險集中單一時點）
 - **體重一天一筆**：`weight_logs.log_date`(date) UNIQUE，所有寫入 upsert on log_date（比照 daily_tdee）。手動 /w（`source='manual'`）永遠覆蓋當天，自動同步（`source='coros'`）只在沒筆時寫，故手動永遠優先、無需特判。`source` 純內部驅動覆蓋邏輯，不出現在任何訊息
-- **AI 路由（預設 claude-cli-only）**：預設 `AI_PROVIDER=claude-cli` 只走 claude -p CLI、**無 fallback**（掛掉該餐直接「分析失敗」，靠手動記錄逃生）。`AI_PROVIDER=gemini` 才有 fallback 鏈（Gemini API → claude -p CLI）；`AI_PROVIDER=claude` 直接走 Claude API（無 fallback）
+- **AI 路由（現行 gemini）**：現行 `AI_PROVIDER=gemini`（2026-07-18 切換，model 寫死 `gemini-3.1-pro-preview`）走 Gemini API，失敗時 fallback claude -p CLI。切換動機：Sonnet 台灣品牌品項知識缺口；模型對照中 2.5-pro 與 Flash 系會假冒「官方值／標示轉錄」＋confidence high，3.1-pro 校準最佳（詳見 [docs/agy-cli-exploration.md](docs/agy-cli-exploration.md)）。preview 後綴的下架風險由 fallback 鏈緩解。`AI_PROVIDER=claude-cli` 只走 claude -p、無 fallback；`AI_PROVIDER=claude` 直接走 Claude API（無 fallback）
 - **claude -p CLI**：透過 subprocess 呼叫 VPS 上的 Claude Code CLI，走 Max 訂閱零費用。`--model` 由 `CLAUDE_CLI_MODEL`（預設 `sonnet` 別名）帶入，有圖片時加 `--allowedTools Read`，timeout 60s。SYSTEM_PROMPT 走 `--append-system-prompt`、`-p` 只放使用者輸入（指令/資料分離；文字帶「使用者輸入：」前綴防 leading-dash 被當 option）
 - **prompt v2 錨點三層**：定值錨（高頻手搖/豆漿釘死 kcal，TFDA 查證值）、品類校準區間（泛用品項檢核）、單位基準（TFDA per-100g macro 三元組）。note 必以「官方值：/標示轉錄：/推估：」開頭（parse soft-check 只警告不擋），原文落庫 `meals.note` 供未來校正係數分類 basis
 - **ai_provider 追蹤**：meals 表 `ai_provider` 欄位記錄判讀來源（gemini/claude-cli/claude-api/null），週報依 provider 分組計費
