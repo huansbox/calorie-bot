@@ -73,6 +73,12 @@ GCP 抵免額回歸（Google Developer Program premium benefit，$319×2＋$315�
 
 → **接回 gemini-api（`AI_PROVIDER=gemini`，model 寫死 `gemini-2.5-pro` @ services/ai.py，3 週前仍驗證可用）為首選短路徑**：零整合、JSON schema 強制輸出、token/model 追蹤完整、自帶 fallback 鏈（Gemini 掛 → claude -p）。agy 續留 VPS 作為「搜尋能力」的未來選項。模型升 Gemini 3.x API 另案評估。
 
+### 2026-07-18 切換後續：billing 阻塞（待使用者處理）
+
+`AI_PROVIDER=gemini` 已切換並重啟，但實測 API key 所在 GCP 專案目前為 **free tier，pro 系模型配額為 0**（429 `free_tier_requests, limit: 0`，2.5-pro 與 3.1-pro 皆擋）——新抵免額所在的 billing account 未連結（或已解除連結）該專案。**待辦：使用者在 Cloud Console 將 API key 所屬專案連上持有抵免額的 billing account**。期間 fallback 鏈已實測接手（gemini 429 → claude -p，每餐多 ~1-2s 與一行 warning log），行為等同 claude-cli-only；billing 接上後 gemini-2.5-pro 即自動生效，無需再部署。
+
+多模型對照初步結果：`gemini-pro-latest` 別名實際解析到 `gemini-3.1-pro`（production 勿用別名，鎖定明確版本）；`gemini-3.5-flash`（free tier 可跑）兩發皆捏造官方權威（「標示轉錄：金車官網 28kcal/100ml」「官方值：6.7g/100ml」＋confidence high，真值 44 kcal/11.7g）——與 agy 側 Flash 同病，**不可用**。2.5-pro vs 3.1-pro-preview 對照待 billing 修復後補測（腳本留存 VPS `/tmp/gemini_model_test.py`）。
+
 ## 順帶發現（與本案無關，待查）
 
 `data/media/` 存有 2026 年 3／5／6 月舊照片，而設計為 24h 過期＋03:00 排程清理——疑似清理只刪 DB 有記錄的檔案，分析失敗等路徑產生的孤兒檔案永久殘留。
