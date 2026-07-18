@@ -1,6 +1,6 @@
 # 路線圖
 
-> 快照日期：2026-07-06。長期方向在此；逐項執行狀態見 [Plan](Plan)。
+> 快照日期：2026-07-18。長期方向在此；逐項執行狀態見 [Plan](Plan)。
 
 ## 已完成里程碑
 
@@ -13,10 +13,11 @@
 | 2026-06-01 | COROS 體重每日自動同步上線（免手動 `/w`），一天一筆 + 同步決策真值表；06-02 全數驗收（issues 001–008、PRD 22 條 User Story 全覆蓋） |
 | 2026-07-01 | **claude -p 轉正**：Gemini 停用（code 保留）、claude-cli 成唯一預設路徑、切 botuser 自己的 binary、關自動更新改每月提醒、每餐回覆印實際模型 |
 | 2026-07-06 | **Prompt v2 上線**：Sonnet 適配＋品牌數值策略——三層錨點（定值錨／品類區間／單位基準，數值經 TFDA／官方逐條查證）、note 關鍵字標準化＋落庫（`meals.note`）、4-4-9 回填機制實驗驗證；隨案 /f 快取 17 項盤點對齊 |
+| 2026-07-18 | **AI provider 切回 Gemini**（`gemini-3.1-pro-preview`）：Sonnet 台灣品牌品項知識缺口驅動（奧利多案例），agy CLI 評估 + 多模型對照定案（2.5-pro／Flash 系因假冒官方值失格）、GCP 抵免額覆蓋費用、claude -p 降為 fallback、gemini 路徑補 `ai_model` 稽核 |
 
 ## 進行中主軸
 
-Prompt v2 運行觀察期：note 關鍵字遵守率、部署當週週報基準台階（屬預期）、天仁鮮奶茶錨點適配。逐項狀態見 [Plan](Plan)，設計全文與觀察交接見 [docs/prompt-v2-design.md](https://github.com/huansbox/calorie-bot/blob/main/docs/prompt-v2-design.md)。
+兩條觀察線並行：Prompt v2（note 關鍵字遵守率、天仁鮮奶茶錨點適配）與 AI provider（note 權威捏造率、preview 模型異動、抵免額消耗）。逐項狀態見 [Plan](Plan)，設計全文見 [docs/prompt-v2-design.md](https://github.com/huansbox/calorie-bot/blob/main/docs/prompt-v2-design.md) 與 [docs/agy-cli-exploration.md](https://github.com/huansbox/calorie-bot/blob/main/docs/agy-cli-exploration.md)。
 
 ## 未來方向（尚未排程）
 
@@ -26,6 +27,7 @@ Prompt v2 運行觀察期：note 關鍵字遵守率、部署當週週報基準�
 - **Web Dashboard**。
 - **食物資料庫**：衛福部 TFDA API、自訂食物別名。
 - **COROS 深化**：sport records / training load 整合，週報加入訓練量視角。
+- **agy 搜尋能力選項**：agy CLI 已裝於 VPS（走 Google AI Pro 訂閱），實測 `-p` 模式可即時搜尋官方營養標示（奧利多案例拿回正解）；若「品牌品項查官方標示」需求成熟，可評估整合為分析路徑之一。整合設計點（token 追蹤斷線等）見 [docs/agy-cli-exploration.md](https://github.com/huansbox/calorie-bot/blob/main/docs/agy-cli-exploration.md)。
 
 ## 非目標（Non-goals）
 
@@ -34,9 +36,9 @@ Prompt v2 運行觀察期：note 關鍵字遵守率、部署當週週報基準�
 - **webhook 模式**——polling 夠用，不想維護公開 URL 與憑證。
 - **多使用者支援**——單人 Bot 是頂層約束，auth_check 綁死單一 chat_id。
 - **自動 `claude update`**——設計定案改「每月提醒 + 手動更新」：自動換 binary 的所有痛點（hang、排程卡死、無人時 envelope 漂移靜默壞掉）皆源於無人值守，手動更新讓漂移發生在有人看著的時候。理由全文見 docs/claude-cli-primary-design.md。
-- **claude -p 的 fallback 鏈**——claude-cli-only 刻意無 fallback，掛掉靠手動記錄逃生；Max 訂閱穩定度可接受。日後失敗頻率變高才重新評估。
+- **Flash 系模型**——API 端與 agy 端實測皆會假冒「官方值／標示轉錄」＋confidence high，快與便宜換不回 note 誠實分層，整條產品線不採用。
 - **修 op zombie process**——已評估，唯一根治要犧牲「secret 不落地」，為一顆無害 zombie 不划算。
-- **Gemini 重新接線**——已停用，程式碼保留但不投資維護；重啟用是明確決策，不是順手改。
+- **per-model 費率表**——週報計費依 provider 一口價（現為 Gemini 3 Pro 費率），不為歷史模型混雜週做逐模型費率，單人專案不值得。
 
 ## 收斂點
 

@@ -33,7 +33,7 @@ ssh root@107.175.30.172 "cd /home/botuser/calorie-bot && sudo -u botuser git pul
 
 ## 日常 / 週期 SOP
 
-- **每餐（被動）**：AI 分析回覆末尾的模型標籤（如 `· claude-sonnet-5`）＝模型漂移的即時監控，不對勁時追查 binary 版本。
+- **每餐（被動）**：AI 分析回覆的模型標籤（正常 `· gemini-3.1-pro-preview`；出現 `· claude-sonnet-5` ＝ Gemini 掛了走 fallback）＝模型漂移與 fallback 觸發的即時監控。gemini 標籤來自 API 回傳的 `model_version`，preview 模型被 Google 改版重導向時會直接現形。
 - **每週一**：確認 API 週報與營養週報有推播（漏發見下方故障排查）。
 - **每月 1 號**：收到 Telegram 更新提醒後，手動對 botuser 的 claude binary 執行 `claude update`——訊息附可直接貼給 Claude Code session 的 prompt，內含 smoke 驗證與 prune（保留最新 2 版，每版約 230 MB）。自動更新已用 `DISABLE_AUTOUPDATER=1` 關閉，**binary 唯一會變的時機＝這次手動更新**。
 
@@ -60,7 +60,7 @@ ssh root@107.175.30.172 "cd /home/botuser/calorie-bot && sudo -u botuser git pul
 | 症狀 | 先看哪裡 |
 |---|---|
 | 任何異常 | `ssh root@107.175.30.172` 後 `journalctl -u calorie-bot -f`（時間戳是 UTC） |
-| 回覆「分析失敗，請重試。」 | claude -p 掛掉或 60s timeout，**設計上無 fallback**。先用手動記錄逃生（`@品名 熱量`、快取編號 11-99、`/m`），再到 VPS 手動跑 `claude -p` 驗證 CLI 本身 |
+| 回覆「分析失敗，請重試。」 | Gemini API 與 fallback claude -p **兩者都掛**才會出現（Gemini 單獨掛會靜默 fallback，log 有 warning、回覆模型標籤變 claude）。先用手動記錄逃生（`@品名 熱量`、快取編號 11-99、`/m`），再查 journalctl 與 VPS 手動跑 `claude -p` |
 | 服務起不來 | `systemctl status calorie-bot`；確認 `/etc/calorie-bot/op-token.env` 存在且 1Password Service Account token 有效 |
 | COROS 同步告警（昨天沒拉到資料） | 檢查 `data/coros-token.json`（botuser 需有檔案與目錄寫權限）；token rotation 壞掉需本機重跑 `scripts/coros_mcp_bootstrap.py` 再傳上去 |
 | 週一 API 週報沒發 | 已知邊界：該週 claude-cli 的 `input_tokens` 全為 0 時整封不發，見 [Tech Debt](Tech-Debt) |

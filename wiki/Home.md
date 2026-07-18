@@ -7,7 +7,7 @@
 以下約束 gate 所有後續決策：
 
 - **單人 Bot、單人維護**：所有 handler 統一以 chat_id 驗證（auth_check decorator），不做多使用者；方案取捨一律「優先簡單方案」。
-- **AI 分析成本壓零**：預設唯一路徑是 `claude -p` CLI（走 Max 訂閱、零 API 費用），**無 fallback**——CLI 掛掉該餐直接「分析失敗」，靠手動記錄逃生。Gemini / Claude API 程式碼保留可切換，但不接線。
+- **AI 分析成本壓零**：現行路徑 Gemini API（`gemini-3.1-pro-preview`，費用由 GCP 抵免額覆蓋至 2027-07，月費約 US$3 級距），失敗時自動 fallback `claude -p` CLI（Max 訂閱零費用）。Claude API 程式碼保留可切換但不接線。切換歷程見 [docs/agy-cli-exploration.md](https://github.com/huansbox/calorie-bot/blob/main/docs/agy-cli-exploration.md)。
 - **polling 模式（非 webhook）**：不需公開 URL、不需反向代理，簡單優先。
 - **密鑰不落地**：1Password 管理（本機 `op run`、VPS Service Account），`.env` 只存 `op://` 參照，明文密鑰不進磁碟。
 - **排程時間一律台灣時間**（scheduler `timezone="Asia/Taipei"`）；VPS 系統時鐘是 UTC，差 8 小時，看 log 時需換算。
@@ -27,9 +27,10 @@
 
 ## 專案階段
 
-- **已完成**：核心食物記錄（文字／照片 AI 分析、手動記錄、食物快取、修正按鈕）、週報與 API 費用追蹤、COROS TDEE 每日自動同步、COROS 體重每日自動同步（2026-06 上線並全數驗收）、`claude -p` 轉正（2026-07-01，claude-cli 唯一預設分析路徑）。
-- **2026-07-06 上線**：Prompt v2——Sonnet 適配的估算 prompt 大改版：三層錨點（數值經 TFDA／官方查證）、營養標示照直接轉錄、note 依據關鍵字標準化並落庫。
-- **進行中**：prompt v2 運行觀察期，詳見 [Plan](Plan)。
+- **已完成**：核心食物記錄（文字／照片 AI 分析、手動記錄、食物快取、修正按鈕）、週報與 API 費用追蹤、COROS TDEE 每日自動同步、COROS 體重每日自動同步（2026-06 上線並全數驗收）、`claude -p` 轉正（2026-07-01）。
+- **2026-07-06 上線**：Prompt v2——估算 prompt 大改版：三層錨點（數值經 TFDA／官方查證）、營養標示照直接轉錄、note 依據關鍵字標準化並落庫。
+- **2026-07-18 上線**：AI provider 切回 Gemini（`gemini-3.1-pro-preview`）——台灣品牌品項知識缺口驅動，模型對照定案，claude -p 降為 fallback。
+- **進行中**：prompt v2 與 AI provider 兩條觀察線，詳見 [Plan](Plan)。
 
 ## Wiki 頁面導覽
 
