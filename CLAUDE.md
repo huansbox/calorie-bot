@@ -6,9 +6,9 @@
 
 ## 進行中的設計
 
-- **AI provider 品質評估（已定案 2026-07-18）**：Sonnet 台灣品牌品項知識缺口（奧利多案例，判定為 model 非 prompt 問題）→ VPS 裝 agy CLI smoke 4/4 全過（留作搜尋能力選項）→ GCP 抵免額回歸後**接回 gemini-api，模型對照後選定 `gemini-3.1-pro-preview`**（7/7 note 誠實；2.5-pro 與 Flash 系因假冒官方值失格）。全程記錄見 [docs/agy-cli-exploration.md](docs/agy-cli-exploration.md)
-- **Prompt v2（Sonnet 適配）+ 品牌數值策略**（**已上線 2026-07-06，觀察期**）：R4 三視角設計 review → R5 使用者逐段審定 → 4-4-9 回填機制實驗（錨點精度 0.2%）→ R6 錨點 15 條 TFDA／官方查證 → 實作三視角 review（R7）→ 兩段式部署 smoke 全過（四種 note 情境 4/4 命中；「50嵐奶茶半糖」歷史原句命中 700cc 預設鎖 435）→ /f 快取盤點 17 項對齊新錨點（更新 4：芝麻麻糬、8冰綠、Subway、星巴克採台灣官方最高值口徑）。隨案新增 `meals.note` 落庫（校正係數 basis 分類用）。**後續觀察清單（note 遵守率、7/13 週報台階屬預期、天仁錨點適配、快取備忘、校正係數前置）見 [docs/prompt-v2-design.md](docs/prompt-v2-design.md)「運行觀察交接」段**
-- **claude -p 轉正 + 每月更新提醒**（已上線 2026-07-01，**全案完結**）：`claude -p` 唯一預設路徑（Gemini 停用、code 保留）、`--model sonnet`（現解析 Sonnet 5）、`DISABLE_AUTOUPDATER=1` + 每月 1 號 10:30 提醒手動 update、每餐回覆印實際模型。詳見 [docs/claude-cli-primary-design.md](docs/claude-cli-primary-design.md)
+- **AI provider 品質評估（已定案並部署 2026-07-18，觀察期）**：Sonnet 台灣品牌品項知識缺口（奧利多案例，判定為 model 非 prompt 問題）→ VPS 裝 agy CLI smoke 4/4 全過（留作搜尋能力選項）→ GCP 抵免額回歸後**接回 gemini-api，模型對照後選定 `gemini-3.1-pro-preview`**（note 誠實度最佳；2.5-pro 與 Flash 系因假冒官方值失格）。全鏈 smoke 過、gemini 路徑補記 `ai_model`。觀察項：note 權威捏造率（已知 1/8，維他露張冠李戴案）、preview 模型異動（看 ai_model 漂移）、抵免額消耗。全程記錄見 [docs/agy-cli-exploration.md](docs/agy-cli-exploration.md)
+- **Prompt v2（Sonnet 適配）+ 品牌數值策略**（**已上線 2026-07-06，觀察期**）：R4 三視角設計 review → R5 使用者逐段審定 → 4-4-9 回填機制實驗（錨點精度 0.2%）→ R6 錨點 15 條 TFDA／官方查證 → 實作三視角 review（R7）→ 兩段式部署 smoke 全過（四種 note 情境 4/4 命中；「50嵐奶茶半糖」歷史原句命中 700cc 預設鎖 435）→ /f 快取盤點 17 項對齊新錨點（更新 4：芝麻麻糬、8冰綠、Subway、星巴克採台灣官方最高值口徑）。隨案新增 `meals.note` 落庫（校正係數 basis 分類用）。**後續觀察清單（note 遵守率、7/13 週報台階屬預期、天仁錨點適配、快取備忘、校正係數前置）見 [docs/prompt-v2-design.md](docs/prompt-v2-design.md)「運行觀察交接」段**。註：2026-07-18 起主要讀者由 Sonnet 5 改為 gemini-3.1-pro-preview（prompt 不動，觀察清單中 Sonnet 專屬項目適用性下降；note 關鍵字制度實測跨模型通用且成為模型評選指標）
+- **claude -p 轉正 + 每月更新提醒**（已上線 2026-07-01，全案完結；**2026-07-18 起預設 provider 切回 gemini，claude -p 降為 fallback**）：`--model sonnet`（現解析 Sonnet 5）、`DISABLE_AUTOUPDATER=1` + 每月 1 號 10:30 提醒手動 update（fallback 仍依賴 CLI，提醒照常）、每餐回覆印實際模型。詳見 [docs/claude-cli-primary-design.md](docs/claude-cli-primary-design.md)
 
 ## 技術架構
 
@@ -96,12 +96,12 @@ wiki/                # GitHub wiki 頁面（唯一編輯處，CI 自動發佈到
 - **claude -p CLI**：透過 subprocess 呼叫 VPS 上的 Claude Code CLI，走 Max 訂閱零費用。`--model` 由 `CLAUDE_CLI_MODEL`（預設 `sonnet` 別名）帶入，有圖片時加 `--allowedTools Read`，timeout 60s。SYSTEM_PROMPT 走 `--append-system-prompt`、`-p` 只放使用者輸入（指令/資料分離；文字帶「使用者輸入：」前綴防 leading-dash 被當 option）
 - **prompt v2 錨點三層**：定值錨（高頻手搖/豆漿釘死 kcal，TFDA 查證值）、品類校準區間（泛用品項檢核）、單位基準（TFDA per-100g macro 三元組）。note 必以「官方值：/標示轉錄：/推估：」開頭（parse soft-check 只警告不擋），原文落庫 `meals.note` 供未來校正係數分類 basis
 - **ai_provider 追蹤**：meals 表 `ai_provider` 欄位記錄判讀來源（gemini/claude-cli/claude-api/null），週報依 provider 分組計費
-- **ai_model 追蹤**：meals 表 `ai_model` 欄位記錄實際判讀模型名（如 `claude-sonnet-5`），claude-cli 路徑寫入（即時記錄 + `/b` 補記皆寫）。從 stdout JSON envelope 的 `modelUsage` 解析——**新版 CLI（≥2.1.197）會混入內部小模型（haiku），故取 token 用量最大的主判讀模型，不能取第一個 key**（舊版單 key 時 `next(iter())` 剛好對，升級後會誤記成 haiku）。稽核用途，2026-04-09 API key 洩漏事件衍生
+- **ai_model 追蹤**：meals 表 `ai_model` 欄位記錄實際判讀模型名（如 `gemini-3.1-pro-preview`、`claude-sonnet-5`），claude-cli 與 gemini 路徑皆寫入（即時記錄 + `/b` 補記皆寫），Telegram 回覆印同款標示。gemini 從 API 回應 `model_version` 帶入（2026-07-18 起，preview 模型被 Google 改版重導向時可現形）；claude-cli 從 stdout JSON envelope 的 `modelUsage` 解析——**新版 CLI（≥2.1.197）會混入內部小模型（haiku），故取 token 用量最大的主判讀模型，不能取第一個 key**（舊版單 key 時 `next(iter())` 剛好對，升級後會誤記成 haiku）。稽核用途，2026-04-09 API key 洩漏事件衍生
 - **Gemini JSON mode**：response_mime_type + response_json_schema 強制合法 JSON 輸出
 - **Claude JSON 容錯**：parse_ai_response 處理 code fence、畸形 JSON (如 `>` 替代 `:`)、confidence 數字→字串轉換
 - **圖片 24 小時過期**：暫存 data/media/，排程清理
 - **API 費用追蹤**：每筆 meal 記錄 input/output tokens + ai_provider，週一推播週報（依 provider 分組，claude-cli 費用為 $0）
-- **ai_confidence 觀察中**：Gemini 幾乎不回 low/medium（Prompt 指示未被嚴格遵守），目前保留欄位觀察，未來可能移除。區分 AI vs 手動用 input_tokens=0 即可
+- **ai_confidence 觀察中**：v1 時代 Gemini 2.5 Pro 幾乎不回 low/medium；prompt v2 + gemini-3.1-pro-preview 已見合理分佈（high 有依據、推估給 medium、不確定給 low），欄位續留觀察。已知失效模式：權威捏造時會連帶標 high。區分 AI vs 手動用 input_tokens=0 即可
 - **手動記錄**：三種免 AI 輸入方式 — 貼上 Bot 回覆、@前綴快速輸入、/m 指令，末尾可加 x 倍數（如 x2, x0.5）
 - **手動修正**：AI 分析回覆附「修正」按鈕，點擊後輸入正確值直接更新該筆記錄
 - **熱量計算**：AI 只回傳三大營養素重量，程式端用 4-4-9 公式算熱量，回覆含百分比
