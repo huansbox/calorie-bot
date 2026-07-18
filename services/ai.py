@@ -253,6 +253,7 @@ async def _analyze_gemini(
         output_tokens=output_tokens,
         thinking_tokens=thinking_tokens,
         provider="gemini",
+        ai_model=getattr(response, "model_version", None),
     )
 
 
