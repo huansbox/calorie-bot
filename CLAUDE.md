@@ -6,6 +6,7 @@
 
 ## 進行中的設計
 
+- **AI provider 品質評估（agy 探索完成，待決策）**：Sonnet 台灣品牌品項知識缺口（奧利多案例，判定為 model 非 prompt 問題）→ VPS 裝 agy CLI 1.1.4（Google AI Pro 訂閱）smoke 4/4 全過；GCP 抵免額回歸後**接回 gemini-api 為首選短路徑**，agy 留作搜尋能力選項。安裝細節、權限語法、模型對照、整合設計點見 [docs/agy-cli-exploration.md](docs/agy-cli-exploration.md)
 - **Prompt v2（Sonnet 適配）+ 品牌數值策略**（**已上線 2026-07-06，觀察期**）：R4 三視角設計 review → R5 使用者逐段審定 → 4-4-9 回填機制實驗（錨點精度 0.2%）→ R6 錨點 15 條 TFDA／官方查證 → 實作三視角 review（R7）→ 兩段式部署 smoke 全過（四種 note 情境 4/4 命中；「50嵐奶茶半糖」歷史原句命中 700cc 預設鎖 435）→ /f 快取盤點 17 項對齊新錨點（更新 4：芝麻麻糬、8冰綠、Subway、星巴克採台灣官方最高值口徑）。隨案新增 `meals.note` 落庫（校正係數 basis 分類用）。**後續觀察清單（note 遵守率、7/13 週報台階屬預期、天仁錨點適配、快取備忘、校正係數前置）見 [docs/prompt-v2-design.md](docs/prompt-v2-design.md)「運行觀察交接」段**
 - **claude -p 轉正 + 每月更新提醒**（已上線 2026-07-01，**全案完結**）：`claude -p` 唯一預設路徑（Gemini 停用、code 保留）、`--model sonnet`（現解析 Sonnet 5）、`DISABLE_AUTOUPDATER=1` + 每月 1 號 10:30 提醒手動 update、每餐回覆印實際模型。詳見 [docs/claude-cli-primary-design.md](docs/claude-cli-primary-design.md)
 
