@@ -200,7 +200,7 @@ async def sync_coros_tdee(app: Application):
     start = yesterday - timedelta(days=6)
 
     try:
-        active_by_date = fetch_and_persist(COROS_TOKEN_PATH, days=8)
+        active_by_date, refresh_warning = fetch_and_persist(COROS_TOKEN_PATH, days=8)
     except CorosMCPError as e:
         msg = f"⚠️ COROS 拉取失敗\n{e}\n請手動 /t 補昨日"
         logger.error("COROS sync failed: %s", e)
@@ -209,6 +209,19 @@ async def sync_coros_tdee(app: Application):
         except Exception as send_err:
             logger.error("Failed to send Telegram alert: %s", send_err)
         return
+
+    if refresh_warning:
+        # refresh 失敗但已用既存 access_token 撈到資料：警示但不要求手動 /t。
+        # 本 job 每日一跑，天然限頻一則。
+        msg = (
+            "⚠️ COROS token refresh 失敗（已用既存 access_token 續行，TDEE 同步正常）\n"
+            f"{refresh_warning}\n"
+            "refresh 持續故障請注意 access_token 效期（約 30 天）"
+        )
+        try:
+            await app.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
+        except Exception as send_err:
+            logger.error("Failed to send Telegram alert: %s", send_err)
 
     existing_rows = get_tdee_by_week(start, yesterday)
     existing_dates = {datetime.strptime(r["date"], "%Y-%m-%d").date() for r in existing_rows}

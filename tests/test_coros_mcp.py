@@ -13,6 +13,7 @@ from services.coros_mcp import (
     parse_daily_health,
     parse_user_weight,
     refresh_access_token,
+    refresh_with_fallback,
     save_token,
 )
 
@@ -157,7 +158,7 @@ class TestRefreshAccessToken:
             "mcp_url": "https://example/mcp",
             "scope": "openid mcp.tools offline_access",
         }
-        with patch("services.coros_mcp.urllib.request.urlopen") as mock_open:
+        with patch("services.coros_mcp_core.urllib.request.urlopen") as mock_open:
             mock_open.return_value.__enter__.return_value.read.return_value = json.dumps({
                 "access_token": "new-a",
                 "refresh_token": "new-r",
@@ -174,13 +175,41 @@ class TestRefreshAccessToken:
 
     def test_keeps_old_refresh_token_if_server_doesnt_return_new(self):
         original = {"client_id": "c", "refresh_token": "keep-me"}
-        with patch("services.coros_mcp.urllib.request.urlopen") as mock_open:
+        with patch("services.coros_mcp_core.urllib.request.urlopen") as mock_open:
             mock_open.return_value.__enter__.return_value.read.return_value = json.dumps({
                 "access_token": "new-a",
                 "expires_in": 100,
             }).encode()
             new = refresh_access_token(original)
         assert new["refresh_token"] == "keep-me"
+
+
+# ── refresh_with_fallback ───────────────────────────────────
+
+def _token_file(tmp_path: Path) -> Path:
+    path = tmp_path / "tok.json"
+    save_token(path, {"client_id": "c", "refresh_token": "r-1", "access_token": "a-1"})
+    return path
+
+
+class TestRefreshWithFallback:
+    def test_refresh_ok_saves_rotated_token_no_warning(self, tmp_path: Path):
+        path = _token_file(tmp_path)
+        with patch("services.coros_mcp_core.refresh_access_token", return_value={
+                "client_id": "c", "refresh_token": "r-2", "access_token": "a-2"}):
+            token, warn = refresh_with_fallback(path)
+        assert warn is None
+        assert token["access_token"] == "a-2"
+        assert load_token(path)["refresh_token"] == "r-2"  # rotated + 已寫回
+
+    def test_refresh_fail_returns_existing_token_with_warning(self, tmp_path: Path):
+        path = _token_file(tmp_path)
+        with patch("services.coros_mcp_core.refresh_access_token",
+                   side_effect=CorosMCPError("refresh 失敗 status=500")):
+            token, warn = refresh_with_fallback(path)
+        assert warn is not None and "500" in warn
+        assert token["access_token"] == "a-1"              # 既存 token 續行
+        assert load_token(path)["refresh_token"] == "r-1"  # 檔案不動
 
 
 # ── fetch_and_persist：流程整合 ──────────────────────────────
@@ -210,14 +239,17 @@ class TestFetchAndPersist:
             assert disk["refresh_token"] == "r-new", "save 必須在 fetch 之前完成"
             return "--- 20260524 ---\nCalories: 500 kcal\n"
 
-        with patch("services.coros_mcp.refresh_access_token", side_effect=fake_refresh):
+        with patch("services.coros_mcp_core.refresh_access_token", side_effect=fake_refresh):
             with patch("services.coros_mcp.fetch_daily_health", side_effect=fake_fetch):
-                result = fetch_and_persist(path)
+                result, warn = fetch_and_persist(path)
 
         assert order == ["refresh", "fetch"]
         assert result == {date(2026, 5, 24): 500}
+        assert warn is None
 
-    def test_refresh_failure_does_not_corrupt_token_file(self, tmp_path: Path):
+    def test_refresh_failure_falls_back_and_keeps_token_file(self, tmp_path: Path):
+        """refresh 失敗不再中止（2026-07-18 COROS refresh 500 實案）：
+        改用既存 access_token 續撈，回傳 warning，token 檔不被半成品蓋掉。"""
         path = tmp_path / "tok.json"
         original = {
             "client_id": "c",
@@ -227,11 +259,27 @@ class TestFetchAndPersist:
         save_token(path, original)
 
         def boom(tok: dict) -> dict:
-            raise CorosMCPError("simulated refresh failure")
+            raise CorosMCPError("refresh 失敗 status=500")
 
-        with patch("services.coros_mcp.refresh_access_token", side_effect=boom):
-            with pytest.raises(CorosMCPError):
-                fetch_and_persist(path)
+        def fake_fetch(tok: dict, days: int = 2, tz: str = "Asia/Taipei") -> str:
+            assert tok["access_token"] == "a-old", "必須用既存 access_token 續行"
+            return "--- 20260718 ---\nCalories: 800 kcal\n"
 
-        # 磁碟上的 token 還是原本的，沒被半成品蓋掉
+        with patch("services.coros_mcp_core.refresh_access_token", side_effect=boom):
+            with patch("services.coros_mcp.fetch_daily_health", side_effect=fake_fetch):
+                result, warn = fetch_and_persist(path)
+
+        assert result == {date(2026, 7, 18): 800}
+        assert warn is not None and "500" in warn
         assert load_token(path) == original
+
+    def test_both_layers_fail_raises_combined_message(self, tmp_path: Path):
+        path = _token_file(tmp_path)
+        with patch("services.coros_mcp_core.refresh_access_token",
+                   side_effect=CorosMCPError("refresh 失敗 status=500")), \
+             patch("services.coros_mcp.fetch_daily_health",
+                   side_effect=CorosMCPError("MCP 呼叫失敗 status=503")):
+            with pytest.raises(CorosMCPError) as ei:
+                fetch_and_persist(path)
+        # 兩層脈絡都要在訊息裡（告警可區分是哪裡的問題）
+        assert "503" in str(ei.value) and "500" in str(ei.value)
