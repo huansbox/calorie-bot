@@ -44,7 +44,8 @@ ssh root@107.175.30.172 "cd /home/botuser/calorie-bot && sudo -u botuser git pul
 **系統面**：
 
 - **op zombie process（決定不修）**：`calorie-bot.service` 穩定掛 1 個 `[op] <defunct>`，源於 op 啟動 daemon 的 double-fork。無害（1 個 PID entry、零 CPU/RAM）、每次重啟重生但不累積；已評估過所有修法都不划算。看到它不要動手「修」。出處：CLAUDE.md「已知無害現象」段。
-- **COROS refresh_token rotation**：每次 refresh 都換新 token、舊的立即失效。`services/coros_mcp.py` 以 atomic write（tmp file + rename）寫回、`save → fetch` 順序確保 refresh 成功先持久化。動這段前務必讀 CLAUDE.md 關鍵設計決策段；token 檔壞掉要重跑 bootstrap。
+- **COROS refresh_token rotation**：每次 refresh 都換新 token、舊的立即失效。`services/coros_mcp_core.py` 以 atomic write（tmp file + rename）寫回、`save → fetch` 順序確保 refresh 成功先持久化。refresh 失敗會退用既存 access_token（30 天效期）續撈並發「已續行」警示，不再整體中止。動這段前務必讀 CLAUDE.md 關鍵設計決策段；token 檔壞掉要重跑 bootstrap。
+- **COROS 共用核心**：`services/coros_mcp_core.py` 與 strava-sync `lt2_auto/coros_mcp_core.py` 是必須逐字節相同的複本；改任一份後跑 strava-sync `tools/sync_coros_core.py` 同步（其 sync.bat 每小時 drift check + ntfy 告警）。
 - **claude CLI `modelUsage` 混入內部小模型**：CLI ≥ 2.1.197 的 stdout envelope 會混入內部 haiku，`ai_model` 必須取 token 用量最大的主模型、不能取第一個 key（舊版單 key 時剛好對，升級後會誤記）。出處：commit `97755c7`、CLAUDE.md「ai_model 追蹤」。
 - **`--model` 別名解析 baked 進 binary 版本**：`--model sonnet` 只給「這顆 binary 知道的最新 sonnet」，更新 binary 可能讓模型跳版（如 sonnet-4-6 → Sonnet 5）。出處：[docs/claude-cli-primary-design.md](https://github.com/huansbox/calorie-bot/blob/main/docs/claude-cli-primary-design.md)。
 - **DB migrations 是 forward-only**：`scripts/migrate_weight_logs_log_date.sql` 與 `scripts/migrate_meals_add_note.sql` 都已對 prod 執行過，不可重跑。
@@ -63,5 +64,6 @@ ssh root@107.175.30.172 "cd /home/botuser/calorie-bot && sudo -u botuser git pul
 | 回覆「分析失敗，請重試。」 | Gemini API 與 fallback claude -p **兩者都掛**才會出現（Gemini 單獨掛會靜默 fallback，log 有 warning、回覆模型標籤變 claude）。先用手動記錄逃生（`@品名 熱量`、快取編號 11-99、`/m`），再查 journalctl 與 VPS 手動跑 `claude -p` |
 | 服務起不來 | `systemctl status calorie-bot`；確認 `/etc/calorie-bot/op-token.env` 存在且 1Password Service Account token 有效 |
 | COROS 同步告警（昨天沒拉到資料） | 檢查 `data/coros-token.json`（botuser 需有檔案與目錄寫權限）；token rotation 壞掉需本機重跑 `scripts/coros_mcp_bootstrap.py` 再傳上去 |
+| COROS token refresh 失敗（已續行）警示 | COROS 端 refresh 故障、資料面正常，同步未中斷；注意 access_token 效期約 30 天（起算＝最後一次成功 rotation＝token 檔 mtime），若故障持續逼近效期，重跑 bootstrap 換新 token |
 | 週一 API 週報沒發 | 已知邊界：該週 claude-cli 的 `input_tokens` 全為 0 時整封不發，見 [Tech Debt](Tech-Debt) |
 | Bot 完全無回應 | polling 模式，查 VPS 對外網路與 `TELEGRAM_TOKEN`；重啟服務 |
