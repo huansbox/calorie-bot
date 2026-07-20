@@ -1,220 +1,39 @@
-"""COROS MCP client：OAuth refresh + queryDailyHealthData + 文字解析。
+"""COROS MCP client（calobot 端）：queryDailyHealthData / queryUserInfo + 文字解析 + 編排。
 
-設計：
-- Token 存 JSON 檔（rotation 必須 atomic 寫回，否則 refresh_token 失效後排程整體掛掉）
-- access_token 約 30 天有效，但每次排程都先 refresh 一次（換新 refresh_token，續命）
-- MCP 一次 tool call 流程：initialize → initialized notification → tools/call
+token 持久化 / OAuth refresh（含 fallback）/ MCP 傳輸在 services/coros_mcp_core.py——
+與 strava-sync 逐字節共用的複本，修改規範見該檔頭。本檔只放 calobot 專屬的
+fetcher / 解析 / 編排。
 
 Bootstrap 流程見 docs/coros-mcp-setup.md。
 """
 from __future__ import annotations
 
-import json
 import logging
-import os
 import re
-import tempfile
-import urllib.parse
-import urllib.request
 from datetime import date, datetime
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+from services.coros_mcp_core import (  # noqa: F401 — re-export，呼叫端與測試沿用本模組名
+    CorosMCPError,
+    call_mcp_tool,
+    load_token,
+    refresh_access_token,
+    refresh_with_fallback,
+    save_token,
+)
 
-DEFAULT_TOKEN_URL = "https://mcpus.coros.com/oauth2/token"
-DEFAULT_MCP_URL = "https://mcpus.coros.com/mcp"
-MCP_PROTOCOL_VERSION = "2024-11-05"
+logger = logging.getLogger(__name__)
 
 _DATE_RE = re.compile(r"^---\s*(\d{8})\s*---")
 _CAL_RE = re.compile(r"Calories:\s*([\d,]+)\s*kcal")
 _WEIGHT_RE = re.compile(r"Weight:\s*([\d.]+)\s*kg", re.IGNORECASE)
 
 
-class CorosMCPError(Exception):
-    """所有 COROS MCP 相關失敗的統一 exception。"""
-
-
-# ── Token 持久化 ────────────────────────────────────────────
-
-def load_token(path: Path) -> dict:
-    if not path.exists():
-        raise CorosMCPError(
-            f"token 檔不存在：{path}（請先跑 bootstrap：scripts/coros_mcp_bootstrap.py）"
-        )
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        raise CorosMCPError(f"token 檔損壞：{path} ({e})") from e
-
-
-def save_token(path: Path, token: dict) -> None:
-    """Atomic write — 寫到同目錄的暫存檔再 rename，避免 refresh 中途斷電留下半成品。"""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(prefix=".coros-token-", dir=str(path.parent))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(token, f, indent=2)
-        os.replace(tmp_path, path)
-    except Exception:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-        raise
-
-
-# ── OAuth refresh ──────────────────────────────────────────
-
-def refresh_access_token(token: dict) -> dict:
-    """用 refresh_token 換新 access_token。會 rotate refresh_token，呼叫端必須寫回。
-
-    回傳的 dict 結構保留 token 原本的 client_id / token_url / mcp_url 等欄位。
-    """
-    token_url = token.get("token_url", DEFAULT_TOKEN_URL)
-    client_id = token["client_id"]
-    refresh = token["refresh_token"]
-
-    form = urllib.parse.urlencode({
-        "grant_type": "refresh_token",
-        "refresh_token": refresh,
-        "client_id": client_id,
-    }).encode()
-
-    req = urllib.request.Request(
-        token_url,
-        data=form,
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=15) as r:
-            resp = json.loads(r.read())
-    except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="replace")
-        raise CorosMCPError(f"refresh 失敗 status={e.code}: {body[:300]}") from e
-    except urllib.error.URLError as e:
-        raise CorosMCPError(f"refresh 網路錯誤: {e}") from e
-
-    new = dict(token)
-    new["access_token"] = resp["access_token"]
-    if resp.get("refresh_token"):
-        new["refresh_token"] = resp["refresh_token"]
-    new["expires_in"] = resp.get("expires_in")
-    new["scope"] = resp.get("scope", new.get("scope"))
-    return new
-
-
-# ── MCP 呼叫 ───────────────────────────────────────────────
-
-def _mcp_call(
-    mcp_url: str,
-    access_token: str,
-    method: str,
-    params: dict,
-    session: str | None = None,
-    req_id: int = 1,
-    timeout: int = 30,
-) -> tuple[dict, str | None]:
-    body = {"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json, text/event-stream",
-        "Authorization": f"Bearer {access_token}",
-    }
-    if session:
-        headers["Mcp-Session-Id"] = session
-
-    req = urllib.request.Request(
-        mcp_url,
-        data=json.dumps(body).encode(),
-        headers=headers,
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            raw = r.read().decode()
-            sess = r.headers.get("Mcp-Session-Id") or session
-            ctype = r.headers.get("Content-Type", "")
-    except urllib.error.HTTPError as e:
-        body_text = e.read().decode(errors="replace")
-        raise CorosMCPError(f"MCP {method} 失敗 status={e.code}: {body_text[:300]}") from e
-
-    if "text/event-stream" in ctype:
-        for line in raw.splitlines():
-            if line.startswith("data:"):
-                payload = line[5:].strip()
-                if payload:
-                    return json.loads(payload), sess
-        raise CorosMCPError(f"MCP {method}：SSE 回應沒有 data 行")
-    return json.loads(raw), sess
-
-
-def _mcp_notify(mcp_url: str, access_token: str, session: str | None, method: str, params: dict) -> None:
-    body = {"jsonrpc": "2.0", "method": method, "params": params}
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json, text/event-stream",
-        "Authorization": f"Bearer {access_token}",
-    }
-    # session 為 None（server stateless）時不帶 Mcp-Session-Id header
-    if session:
-        headers["Mcp-Session-Id"] = session
-    req = urllib.request.Request(
-        mcp_url,
-        data=json.dumps(body).encode(),
-        headers=headers,
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=10) as r:
-        r.read()
-
-
-def _call_mcp_tool(token: dict, tool_name: str, arguments: dict) -> str:
-    """共用的 MCP tool 呼叫流程：initialize → initialized → tools/call → 取回 text。
-
-    只用既有 token['access_token']，**不 refresh**（refresh 由 fetch_and_persist 負責）。
-    體重同步刻意走 load_token → fetch_user_info（見 PRD「Token 處理」），就靠這條
-    不綁 refresh 的路徑成立。
-    """
-    mcp_url = token.get("mcp_url", DEFAULT_MCP_URL)
-    access_token = token["access_token"]
-
-    _, sess = _mcp_call(mcp_url, access_token, "initialize", {
-        "protocolVersion": MCP_PROTOCOL_VERSION,
-        "capabilities": {},
-        "clientInfo": {"name": "calobot", "version": "1.0.0"},
-    })
-    # COROS MCP server（2026-06 升級至 Build2.11.15 / 協議 2025-06-18）改 stateless：
-    # initialize 不再回 Mcp-Session-Id header。新版 MCP spec 下 session id 屬選用，
-    # 沒有就代表後續呼叫不需帶該 header（_mcp_call / _mcp_notify 的 `if session:` 會略過）。
-    # 舊版曾在此 `raise 沒拿到 session id` 而中止，會誤殺 stateless server。
-    _mcp_notify(mcp_url, access_token, sess, "notifications/initialized", {})
-
-    call_resp, _ = _mcp_call(mcp_url, access_token, "tools/call", {
-        "name": tool_name,
-        "arguments": arguments,
-    }, session=sess, req_id=2)
-
-    if "error" in call_resp:
-        raise CorosMCPError(f"{tool_name} 回應 error: {call_resp['error']}")
-    result = call_resp.get("result", {})
-    contents = result.get("content", [])
-    if not contents:
-        raise CorosMCPError(f"{tool_name} 回應沒有 content")
-    text = contents[0].get("text", "")
-    # COROS 回的 text 是 JSON 字串包了一層真的文字，剝掉
-    if text.startswith('"') and text.endswith('"'):
-        try:
-            text = json.loads(text)
-        except json.JSONDecodeError:
-            pass
-    return text
-
+# ── Fetcher ─────────────────────────────────────────────────
 
 def fetch_daily_health(token: dict, days: int = 2, tz: str = "Asia/Taipei") -> str:
     """呼叫 MCP queryDailyHealthData 回傳純文字。需要 token['access_token']。"""
-    return _call_mcp_tool(token, "queryDailyHealthData", {"days": days, "timezone": tz})
+    return call_mcp_tool(token, "queryDailyHealthData", {"days": days, "timezone": tz})
 
 
 def fetch_user_info(token: dict) -> str:
@@ -222,9 +41,9 @@ def fetch_user_info(token: dict) -> str:
 
     比照 fetch_daily_health：只用既有 access_token 發 MCP call，不 refresh。
     體重同步走 load_token → fetch_user_info，**不可複用 fetch_and_persist**
-    （它把 refresh+save+fetch 綁死，會違反「體重同步不 refresh」的要求，見 PRD US22）。
+    （它把 refresh+fetch 綁在一起，會違反「體重同步不 refresh」的要求，見 PRD US22）。
     """
-    return _call_mcp_tool(token, "queryUserInfo", {})
+    return call_mcp_tool(token, "queryUserInfo", {})
 
 
 # ── 文字解析 ────────────────────────────────────────────────
@@ -273,18 +92,23 @@ def parse_user_weight(text: str) -> float | None:
 
 # ── 高階介面（給 scheduler 用）─────────────────────────────
 
-def fetch_and_persist(token_path: Path, days: int = 2, tz: str = "Asia/Taipei") -> dict[date, int]:
-    """完整流程：load → refresh → save → fetch → parse。
+def fetch_and_persist(
+    token_path: Path, days: int = 2, tz: str = "Asia/Taipei",
+) -> tuple[dict[date, int], str | None]:
+    """完整流程：load → refresh（失敗退用既存 access_token）→ fetch → parse。
 
-    refresh 永遠先做（換新 refresh_token，避免 token 因不活躍過期）。
+    回傳 (parsed, refresh 失敗訊息或 None)。refresh 失敗不中斷撈取（COROS 端
+    refresh 故障實案見 coros_mcp_core.refresh_with_fallback）；撈取失敗 raise
+    CorosMCPError，若 refresh 亦失敗，訊息合併兩層脈絡。
     """
-    token = load_token(token_path)
-    logger.info("COROS MCP: refresh access_token ...")
-    token = refresh_access_token(token)
-    save_token(token_path, token)
-    logger.info("COROS MCP: token 已更新（refresh_token rotated）")
-
-    text = fetch_daily_health(token, days=days, tz=tz)
+    token, refresh_warning = refresh_with_fallback(token_path)
+    try:
+        text = fetch_daily_health(token, days=days, tz=tz)
+    except CorosMCPError as e:
+        if refresh_warning:
+            raise CorosMCPError(
+                f"{e}（且 token refresh 亦失敗：{refresh_warning}）") from e
+        raise
     parsed = parse_daily_health(text)
     logger.info("COROS MCP: 取得 %d 天 daily health data", len(parsed))
-    return parsed
+    return parsed, refresh_warning
