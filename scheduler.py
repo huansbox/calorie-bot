@@ -299,10 +299,11 @@ async def cleanup_expired_images(app: Application):
         return
 
     for row in expired:
-        path = row["image_path"]
-        if path and os.path.exists(path):
-            os.remove(path)
-            logger.info("Deleted expired image: %s", path)
+        # 相簿記錄的 image_path 是逗號串接的多個路徑（見 handlers/meal.py）
+        for path in (row["image_path"] or "").split(","):
+            if path and os.path.exists(path):
+                os.remove(path)
+                logger.info("Deleted expired image: %s", path)
         clear_image_path(row["id"])
 
     logger.info("Cleaned up %d expired images", len(expired))

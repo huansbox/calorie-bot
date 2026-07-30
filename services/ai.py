@@ -180,7 +180,7 @@ def parse_ai_response(raw: str) -> FoodAnalysis:
 
 async def _analyze_gemini(
     text: str | None = None,
-    image_path: str | None = None,
+    image_paths: list[str] | None = None,
 ) -> FoodAnalysis:
     """透過 Gemini API 分析食物。"""
     from google import genai
@@ -189,7 +189,7 @@ async def _analyze_gemini(
     client = genai.Client(api_key=GEMINI_API_KEY)
 
     contents = []
-    if image_path:
+    for image_path in image_paths or []:
         with open(image_path, "rb") as f:
             image_data = f.read()
         ext = image_path.rsplit(".", 1)[-1].lower()
@@ -201,6 +201,13 @@ async def _analyze_gemini(
             "webp": "image/webp",
         }.get(ext, "image/jpeg")
         contents.append(types.Part.from_bytes(data=image_data, mime_type=mime_type))
+
+    if len(image_paths or []) > 1:
+        # 相簿：多張照片屬同一餐，須合併成一份估算（見 handlers/meal.py 相簿聚合）
+        contents.append(types.Part.from_text(
+            text=f"以上 {len(image_paths)} 張照片是同一餐的不同角度或不同菜色，"
+                 "請全部一起看、合併估算成一筆，勿重複計算同一道菜。"
+        ))
 
     if text:
         contents.append(types.Part.from_text(text=text))
@@ -262,7 +269,7 @@ async def _analyze_gemini(
 
 async def _analyze_claude(
     text: str | None = None,
-    image_path: str | None = None,
+    image_paths: list[str] | None = None,
 ) -> FoodAnalysis:
     """透過 Claude API 分析食物。"""
     import anthropic
@@ -270,7 +277,7 @@ async def _analyze_claude(
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     content = []
 
-    if image_path:
+    for image_path in image_paths or []:
         with open(image_path, "rb") as f:
             image_data = base64.b64encode(f.read()).decode("utf-8")
         ext = image_path.rsplit(".", 1)[-1].lower()
@@ -287,6 +294,14 @@ async def _analyze_claude(
                 "source": {"type": "base64", "media_type": media_type, "data": image_data},
             }
         )
+
+    if len(image_paths or []) > 1:
+        # 相簿：多張照片屬同一餐，須合併成一份估算（見 handlers/meal.py 相簿聚合）
+        content.append({
+            "type": "text",
+            "text": f"以上 {len(image_paths)} 張照片是同一餐的不同角度或不同菜色，"
+                    "請全部一起看、合併估算成一筆，勿重複計算同一道菜。",
+        })
 
     if text:
         content.append({"type": "text", "text": text})
@@ -316,22 +331,29 @@ async def _analyze_claude(
 
 async def _analyze_claude_cli(
     text: str | None = None,
-    image_path: str | None = None,
+    image_paths: list[str] | None = None,
 ) -> FoodAnalysis:
     """透過 claude -p CLI 分析食物（使用 Max 訂閱，零 API 費用）。"""
     import asyncio
     import os
 
-    if not text and not image_path:
+    paths = image_paths or []
+    if not text and not paths:
         raise ValueError("至少需要提供文字或照片")
 
     user_parts = []
     if text:
         # 前綴確保 -p 引數不以 "-" 開頭（如「-18度C」），避免被 CLI 當 option 解析
         user_parts.append(f"使用者輸入：{text}")
-    if image_path:
-        abs_path = os.path.abspath(image_path)
-        user_parts.append(f"請讀取並分析這張食物照片：{abs_path}")
+    if len(paths) == 1:
+        user_parts.append(f"請讀取並分析這張食物照片：{os.path.abspath(paths[0])}")
+    elif paths:
+        # 相簿：多張照片屬同一餐，須合併成一份估算（見 handlers/meal.py 相簿聚合）
+        listed = "\n".join(f"- {os.path.abspath(p)}" for p in paths)
+        user_parts.append(
+            f"以下 {len(paths)} 張照片是同一餐的不同角度或不同菜色，"
+            f"請全部讀取後合併估算成一筆，勿重複計算同一道菜：\n{listed}"
+        )
 
     # 指令/資料分離：SYSTEM_PROMPT 走 --append-system-prompt，-p 只放使用者輸入
     cmd = [
@@ -339,7 +361,7 @@ async def _analyze_claude_cli(
         "--append-system-prompt", SYSTEM_PROMPT,
         "--output-format", "json", "--model", CLAUDE_CLI_MODEL,
     ]
-    if image_path:
+    if paths:
         cmd.extend(["--allowedTools", "Read"])
 
     logger.info("Calling claude -p CLI for food analysis")
@@ -396,9 +418,11 @@ async def _analyze_claude_cli(
 
 async def analyze_food(
     text: str | None = None,
-    image_path: str | None = None,
+    image_paths: list[str] | None = None,
 ) -> FoodAnalysis:
     """分析食物：預設走 claude -p CLI（唯一路徑，無 fallback）。
+
+    image_paths 可帶多張（Telegram 相簿），一律合併成一次判讀、一筆記錄。
 
     AI_PROVIDER 路由：
     - "claude"：直接用 Claude API（無 fallback，備選）
@@ -406,15 +430,15 @@ async def analyze_food(
     - 其餘（含預設 "claude-cli"）：只走 claude -p CLI，無 fallback
     """
     if AI_PROVIDER == "claude":
-        return await _analyze_claude(text=text, image_path=image_path)
+        return await _analyze_claude(text=text, image_paths=image_paths)
 
     if AI_PROVIDER == "gemini":
         # 保留：Gemini API 優先，失敗時 fallback 到 claude -p CLI
         try:
-            return await _analyze_gemini(text=text, image_path=image_path)
+            return await _analyze_gemini(text=text, image_paths=image_paths)
         except Exception as e:
             logger.warning("Gemini 分析失敗，切換至 claude -p: %s", e)
-        return await _analyze_claude_cli(text=text, image_path=image_path)
+        return await _analyze_claude_cli(text=text, image_paths=image_paths)
 
     # 預設 claude-cli：唯一路徑，無 fallback
-    return await _analyze_claude_cli(text=text, image_path=image_path)
+    return await _analyze_claude_cli(text=text, image_paths=image_paths)

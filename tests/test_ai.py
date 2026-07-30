@@ -154,17 +154,17 @@ def _stub_analysis(provider: str) -> FoodAnalysis:
 
 def _patch_analyzers(monkeypatch, calls: list, gemini_raises: bool = False):
     """把三個 _analyze_* 換成記錄呼叫的 stub。AI_PROVIDER 需另外 monkeypatch。"""
-    async def fake_claude(text=None, image_path=None):
+    async def fake_claude(text=None, image_paths=None):
         calls.append("claude")
         return _stub_analysis("claude-api")
 
-    async def fake_gemini(text=None, image_path=None):
+    async def fake_gemini(text=None, image_paths=None):
         calls.append("gemini")
         if gemini_raises:
             raise RuntimeError("gemini boom")
         return _stub_analysis("gemini")
 
-    async def fake_cli(text=None, image_path=None):
+    async def fake_cli(text=None, image_paths=None):
         calls.append("cli")
         return _stub_analysis("claude-cli")
 
@@ -234,15 +234,17 @@ class _FakeProc:
 
 
 class TestClaudeCliModelArg:
-    def _run_and_capture(self, monkeypatch, image_path=None):
+    def _run_and_capture(self, monkeypatch, image_path=None, image_paths=None):
         captured = {}
 
         async def fake_exec(*cmd, **kwargs):
             captured["cmd"] = cmd
             return _FakeProc()
 
+        if image_paths is None and image_path:
+            image_paths = [image_path]
         monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
-        result = asyncio.run(_analyze_claude_cli(text="滷肉飯", image_path=image_path))
+        result = asyncio.run(_analyze_claude_cli(text="滷肉飯", image_paths=image_paths))
         return captured["cmd"], result
 
     def test_model_flag_passed(self, monkeypatch):
@@ -272,6 +274,18 @@ class TestClaudeCliModelArg:
         p = cmd.index("-p")
         assert "fake.jpg" in cmd[p + 1]
         assert services.ai.SYSTEM_PROMPT not in cmd[p + 1]
+
+    def test_multiple_images_listed_once_with_merge_instruction(self, monkeypatch):
+        """相簿多張：全部列進同一個 -p，並要求合併成一筆、勿重複計算。"""
+        cmd, _ = self._run_and_capture(
+            monkeypatch, image_paths=["/tmp/a.jpg", "/tmp/b.jpg", "/tmp/c.jpg"],
+        )
+        p = cmd.index("-p")
+        prompt = cmd[p + 1]
+        assert "a.jpg" in prompt and "b.jpg" in prompt and "c.jpg" in prompt
+        assert "3 張照片" in prompt
+        assert "勿重複計算" in prompt
+        assert "--allowedTools" in cmd
 
     def test_leading_dash_text_framed(self, monkeypatch):
         """使用者文字以 - 開頭時，-p 引數不得以 - 開頭（避免被 CLI 當 option 解析）。"""

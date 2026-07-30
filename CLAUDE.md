@@ -101,7 +101,8 @@ wiki/                # GitHub wiki 頁面（唯一編輯處，CI 自動發佈到
 - **ai_model 追蹤**：meals 表 `ai_model` 欄位記錄實際判讀模型名（如 `gemini-3.1-pro-preview`、`claude-sonnet-5`），claude-cli 與 gemini 路徑皆寫入（即時記錄 + `/b` 補記皆寫），Telegram 回覆印同款標示。gemini 從 API 回應 `model_version` 帶入（2026-07-18 起，preview 模型被 Google 改版重導向時可現形）；claude-cli 從 stdout JSON envelope 的 `modelUsage` 解析——**新版 CLI（≥2.1.197）會混入內部小模型（haiku），故取 token 用量最大的主判讀模型，不能取第一個 key**（舊版單 key 時 `next(iter())` 剛好對，升級後會誤記成 haiku）。稽核用途，2026-04-09 API key 洩漏事件衍生
 - **Gemini JSON mode**：response_mime_type + response_json_schema 強制合法 JSON 輸出
 - **Claude JSON 容錯**：parse_ai_response 處理 code fence、畸形 JSON (如 `>` 替代 `:`)、confidence 數字→字串轉換
-- **圖片 24 小時過期**：暫存 data/media/，排程清理
+- **相簿合併判讀**：Telegram 一次傳多張照片會拆成 N 個獨立 message（只有第一張帶 caption），靠 `media_group_id` 串起來。收到第一張先回「分析中」並起收集任務，等 2 秒內沒有新的同組照片就視為到齊，**N 張圖 + caption 合併送一次 AI、寫一筆**。修此問題前是逐張各判讀一次（2026-07-30 實案：3 張同餐照片 → 3 筆，說明涵蓋的菜色被重複計算 642 kcal）
+- **圖片 24 小時過期**：暫存 data/media/，排程清理。相簿記錄的 `image_path` 是逗號串接的多個路徑，清理排程會拆開逐一刪
 - **API 費用追蹤**：每筆 meal 記錄 input/output tokens + ai_provider，週一推播週報（依 provider 分組，claude-cli 費用為 $0）
 - **ai_confidence 觀察中**：v1 時代 Gemini 2.5 Pro 幾乎不回 low/medium；prompt v2 + gemini-3.1-pro-preview 已見合理分佈（high 有依據、推估給 medium、不確定給 low），欄位續留觀察。已知失效模式：權威捏造時會連帶標 high。區分 AI vs 手動用 input_tokens=0 即可
 - **手動記錄**：三種免 AI 輸入方式 — 貼上 Bot 回覆、@前綴快速輸入、/m 指令，末尾可加 x 倍數（如 x2, x0.5）
