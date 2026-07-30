@@ -21,7 +21,7 @@
   - Claude Sonnet 4.6 API (`AI_PROVIDER=claude`，無 fallback)
 - **資料庫**: Supabase (PostgreSQL) — meals（含 ai_provider / ai_model / note 欄位）, weight_logs（log_date UNIQUE + source，一天一筆）, daily_tdee, food_cache 四張表，全部啟用 RLS，使用 Secret Key 繞過
 - **排程**: APScheduler (AsyncIOScheduler) — 每日 08:00 昨日摘要 + 週一 08:05 API 週報 + 週一 08:10 營養週報 + 03:00 照片清理 + 03:05 COROS TDEE 同步 + 10:29/22:29 COROS 體重同步 + 每月 1 號 10:30 claude 更新提醒
-- **COROS 整合**: queryDailyHealthData → 每日自動補 daily_tdee（免手動 /t）；queryUserInfo → 每日自動補體重（免手動 /w）。同一條 MCP 管線（OAuth + refresh_token rotation）
+- **COROS 整合**: 每日活動消耗（TDEE）走 MCP `queryDailyHealthData`（teamapi 無此資料，2026-07-30 掃過端點確認）；體重走 teamapi 帳密登入（`/account/login` 回應直接帶 weight），MCP `queryUserInfo` 降為 fallback。MCP token 近到期時用帳密自動重新授權（免瀏覽器）
 - **密鑰管理**: 1Password — 本機 `op run` + VPS Service Account，`.env` 只存 `op://` 參照
 - **部署**: RackNerd VPS (Ubuntu 24.04, systemd + `op run`)
 
@@ -47,8 +47,10 @@ services/
   nutrition.py       # 營養素計算 (三大營養素→熱量) + 格式化 (含百分比)
   dates.py           # MMDD 日期解析 (有單元測試)
   format.py          # 訊息格式化 helper：餐別分組清單 (有單元測試)
-  coros_mcp.py       # COROS MCP client（calobot 端）：queryDailyHealthData + queryUserInfo + 文字解析 + 編排（有單元測試）
+  coros_mcp.py       # COROS MCP client（calobot 端）：queryDailyHealthData + queryUserInfo + 文字解析 + token 續命編排（有單元測試）
   coros_mcp_core.py  # COROS 共用核心：token 持久化 + OAuth refresh（含 fallback）+ MCP 傳輸——與 strava-sync 逐字節相同的複本，修改規範見檔頭
+  coros_web.py       # COROS teamapi 直撈（帳密登入）：體重主路徑，零 OAuth（有單元測試）
+  coros_oauth.py     # MCP token 帳密自動重新授權（跑完整 OAuth flow，免瀏覽器），token 近到期時由 coros_mcp.ensure_token 觸發
   weight_sync.py     # decide_weight_sync 純函式：體重同步決策真值表（無 I/O，有單元測試）
 scripts/
   coros_backfill.py       # 手動補登 daily_tdee（MCP 文字檔 or coros-api fallback）
@@ -64,7 +66,9 @@ tests/
   test_food_cache.py # parse_cache_number / is_cache_number 測試 (13 cases)
   test_correction.py # is_meal_type_correction 測試 (5 cases)
   test_report.py     # 週報 helper 測試 (24 cases，每日 map + 4 section)
-  test_coros_mcp.py  # MCP parse (daily health + user weight) + token rotation + refresh fallback 流程 (29 cases)
+  test_coros_mcp.py  # MCP parse (daily health + user weight) + token rotation + refresh fallback + 效期判讀/自動重新授權 (38 cases)
+  test_coros_web.py  # teamapi 體重解析 + OAuth 登入表單解析 (11 cases)
+  test_meal_media_group.py # Telegram 相簿聚合（多張照片合併成一次判讀）(4 cases)
   test_weight_sync.py # decide_weight_sync 真值表 + 閾值邊界測試 (14 cases)
   test_dates.py      # parse_mmdd 測試 (8 cases，含退一年邏輯)
   test_format.py     # format_meal_groups 測試 (8 cases，強制餐別與空 placeholder)
@@ -90,9 +94,10 @@ wiki/                # GitHub wiki 頁面（唯一編輯處，CI 自動發佈到
 - **TDEE = BMR + 活動消耗**：BMR 固定值存 .env，活動消耗來自 COROS（自動）或 /t（手動覆寫）
 - **/t 預設記昨天**：符合早上看手錶輸入昨日消耗的使用情境
 - **COROS 自動同步**：每日 03:05 排程拉過去 7 天 daily health → BMR + Calories 寫 daily_tdee。fill-missing-only 不覆寫手動 /t；昨天沒拉到資料會推 Telegram 告警。`Calories` 欄位含 NEAT，與手錶錶面「活動消耗」widget 一致（實測 27 天誤差 ≤ 1 kcal）
-- **COROS token rotation + refresh fallback**：refresh_token 每次 refresh 都換新，舊的失效。atomic write (tmp file + rename) 寫回避免半成品，`save → fetch` 順序確保 refresh 成功就先持久化。**refresh 失敗不中止**：退用既存 access_token（30 天效期）續撈，Telegram 發「已續行」警示而非要求手動 /t（2026-07-18 起 COROS refresh endpoint 對有效 token 回 500 的實案，7/18-7/19 TDEE 斷兩天）；撈取也失敗才發「請手動 /t」告警（訊息合併兩層脈絡）
+- **COROS token rotation + refresh fallback**：refresh_token 每次 refresh 都換新，舊的失效。atomic write (tmp file + rename) 寫回避免半成品，`save → fetch` 順序確保 refresh 成功就先持久化。**refresh 失敗不中止**：退用既存 access_token（30 天效期）續撈（2026-07-18 起 COROS refresh endpoint 對有效 token 回 500 的實案，7/18-7/19 TDEE 斷兩天）；撈取也失敗才發「請手動 /t」告警（訊息合併兩層脈絡）
+- **COROS token 帳密自動重新授權**（2026-07-30）：refresh 既然救不回來，就讓 token 到期前自己換新的一份。`services/coros_mcp.ensure_token` 從 access_token（JWT）的 `exp` 判斷效期，剩 < 3 天就呼叫 `coros_oauth.bootstrap_token`——用 `COROS_EMAIL`/`COROS_PASSWORD` 跑完整 OAuth authorize flow（DCR 註冊 → authorize → openus 表單登入 → 攔 localhost callback 取 code → PKCE 換 token），**不需要瀏覽器**。token 檔存 `redirect_uri`，之後續期重用同一個 client。效期充足時照常試 refresh，失敗只記 log 不推播（有自動續期兜底，天天推 500 是噪音）；撈取失敗但 token 未到期 → 重新授權後重試一次。**實測坑**：登入表單預設 `country=CN` 會回 `result 1001`，要改 `TW`；POST 缺 `Origin` 或瀏覽器型 UA 同樣 1001。沒設帳密時退回舊行為（refresh 失敗發警示、近到期提醒人工跑 `scripts/coros_mcp_bootstrap.py`）
 - **COROS 共用核心（與 strava-sync 逐字節同步）**：token 持久化／OAuth refresh（含 fallback）／MCP 傳輸抽在 `services/coros_mcp_core.py`，與 strava-sync `lt2_auto/coros_mcp_core.py` 為必須逐字節相同的複本（COROS 端故障歷來同時打壞兩邊）。修改任一份後跑 strava-sync `tools/sync_coros_core.py` 同步；strava-sync sync.bat 每小時 drift check，不一致會 ntfy 告警。此檔嚴禁 repo 專屬內容（規範見檔頭）
-- **COROS 體重自動同步**：每日 10:29（主）+ 22:29（fallback）`queryUserInfo` 抓 profile 當前體重 → `decide_weight_sync` 純函式決策 → upsert `weight_logs`。**走「日期路線」**：profile 體重無時間戳，無法區分「同重」與「沒量」，故只要當天沒筆就寫（接受偶爾寫沿用舊值的假點，換零紀律），`/w` 是假點修正出口。fill-missing-only（當天已有筆→SKIP，故 fallback 自動成立、晨重優先）。決策真值表：當天有筆→SKIP；抓不到→告警不寫；無基準→寫；跳變 >3kg（含離譜壞值）→告警不寫；值同上次→寫+輕提醒；正常→靜默寫。**token 不自己 refresh**，沿用 03:05 `sync_coros_tdee` rotate 過的 access_token（US22，rotation 風險集中單一時點）
+- **COROS 體重自動同步**：每日 10:29（主）+ 22:29（fallback）抓 profile 當前體重 → `decide_weight_sync` 純函式決策 → upsert `weight_logs`。**撈取走 teamapi 帳密登入為主路徑**（比照 strava-sync GitHub #31：零 OAuth、沒有會壞掉的 token 狀態；`/account/login` 回應直接帶 `weight`，不必第二個請求），失敗才退 MCP `queryUserInfo`。**走「日期路線」**：profile 體重無時間戳，無法區分「同重」與「沒量」，故只要當天沒筆就寫（接受偶爾寫沿用舊值的假點，換零紀律），`/w` 是假點修正出口。fill-missing-only（當天已有筆→SKIP，故 fallback 自動成立、晨重優先）。決策真值表：當天有筆→SKIP；抓不到→告警不寫；無基準→寫；跳變 >3kg（含離譜壞值）→告警不寫；值同上次→寫+輕提醒；正常→靜默寫。**token 不自己 refresh**，沿用 03:05 `sync_coros_tdee` rotate 過的 access_token（US22，rotation 風險集中單一時點）
 - **體重一天一筆**：`weight_logs.log_date`(date) UNIQUE，所有寫入 upsert on log_date（比照 daily_tdee）。手動 /w（`source='manual'`）永遠覆蓋當天，自動同步（`source='coros'`）只在沒筆時寫，故手動永遠優先、無需特判。`source` 純內部驅動覆蓋邏輯，不出現在任何訊息
 - **AI 路由（現行 gemini）**：現行 `AI_PROVIDER=gemini`（2026-07-18 切換，model 寫死 `gemini-3.1-pro-preview`）走 Gemini API，失敗時 fallback claude -p CLI。切換動機：Sonnet 台灣品牌品項知識缺口；模型對照中 2.5-pro 與 Flash 系會假冒「官方值／標示轉錄」＋confidence high，3.1-pro 校準最佳（詳見 [docs/agy-cli-exploration.md](docs/agy-cli-exploration.md)）。preview 後綴的下架風險由 fallback 鏈緩解。`AI_PROVIDER=claude-cli` 只走 claude -p、無 fallback；`AI_PROVIDER=claude` 直接走 Claude API（無 fallback）
 - **claude -p CLI**：透過 subprocess 呼叫 VPS 上的 Claude Code CLI，走 Max 訂閱零費用。`--model` 由 `CLAUDE_CLI_MODEL`（預設 `sonnet` 別名）帶入，有圖片時加 `--allowedTools Read`，timeout 60s。SYSTEM_PROMPT 走 `--append-system-prompt`、`-p` 只放使用者輸入（指令/資料分離；文字帶「使用者輸入：」前綴防 leading-dash 被當 option）
@@ -101,7 +106,8 @@ wiki/                # GitHub wiki 頁面（唯一編輯處，CI 自動發佈到
 - **ai_model 追蹤**：meals 表 `ai_model` 欄位記錄實際判讀模型名（如 `gemini-3.1-pro-preview`、`claude-sonnet-5`），claude-cli 與 gemini 路徑皆寫入（即時記錄 + `/b` 補記皆寫），Telegram 回覆印同款標示。gemini 從 API 回應 `model_version` 帶入（2026-07-18 起，preview 模型被 Google 改版重導向時可現形）；claude-cli 從 stdout JSON envelope 的 `modelUsage` 解析——**新版 CLI（≥2.1.197）會混入內部小模型（haiku），故取 token 用量最大的主判讀模型，不能取第一個 key**（舊版單 key 時 `next(iter())` 剛好對，升級後會誤記成 haiku）。稽核用途，2026-04-09 API key 洩漏事件衍生
 - **Gemini JSON mode**：response_mime_type + response_json_schema 強制合法 JSON 輸出
 - **Claude JSON 容錯**：parse_ai_response 處理 code fence、畸形 JSON (如 `>` 替代 `:`)、confidence 數字→字串轉換
-- **圖片 24 小時過期**：暫存 data/media/，排程清理
+- **相簿合併判讀**：Telegram 一次傳多張照片會拆成 N 個獨立 message（只有第一張帶 caption），靠 `media_group_id` 串起來。收到第一張先回「分析中」並起收集任務，等 2 秒內沒有新的同組照片就視為到齊，**N 張圖 + caption 合併送一次 AI、寫一筆**。修此問題前是逐張各判讀一次（2026-07-30 實案：3 張同餐照片 → 3 筆，說明涵蓋的菜色被重複計算 642 kcal）
+- **圖片 24 小時過期**：暫存 data/media/，排程清理。相簿記錄的 `image_path` 是逗號串接的多個路徑，清理排程會拆開逐一刪
 - **API 費用追蹤**：每筆 meal 記錄 input/output tokens + ai_provider，週一推播週報（依 provider 分組，claude-cli 費用為 $0）
 - **ai_confidence 觀察中**：v1 時代 Gemini 2.5 Pro 幾乎不回 low/medium；prompt v2 + gemini-3.1-pro-preview 已見合理分佈（high 有依據、推估給 medium、不確定給 low），欄位續留觀察。已知失效模式：權威捏造時會連帶標 high。區分 AI vs 手動用 input_tokens=0 即可
 - **手動記錄**：三種免 AI 輸入方式 — 貼上 Bot 回覆、@前綴快速輸入、/m 指令，末尾可加 x 倍數（如 x2, x0.5）

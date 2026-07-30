@@ -21,3 +21,7 @@ PUSH_HOUR: int = int(os.getenv("PUSH_HOUR", "8"))
 DATA_DIR: Path = Path(os.getenv("DATA_DIR", "./data"))
 MEDIA_DIR: Path = DATA_DIR / "media"
 COROS_TOKEN_PATH: Path = Path(os.getenv("COROS_TOKEN_PATH", str(DATA_DIR / "coros-token.json")))
+# COROS 帳密：teamapi 體重同步的主路徑憑證，兼作 MCP token 到期時自動重新授權用。
+# 沒設時體重退回 MCP、MCP token 到期需人工跑 scripts/coros_mcp_bootstrap.py。
+COROS_EMAIL: str = os.getenv("COROS_EMAIL", "")
+COROS_PASSWORD: str = os.getenv("COROS_PASSWORD", "")

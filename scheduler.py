@@ -5,7 +5,14 @@ from datetime import date as date_type, datetime, timedelta, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from telegram.ext import Application
 
-from config import BMR, COROS_TOKEN_PATH, PUSH_HOUR, TELEGRAM_CHAT_ID
+from config import (
+    BMR,
+    COROS_EMAIL,
+    COROS_PASSWORD,
+    COROS_TOKEN_PATH,
+    PUSH_HOUR,
+    TELEGRAM_CHAT_ID,
+)
 from services.coros_mcp import (
     CorosMCPError,
     fetch_and_persist,
@@ -13,6 +20,7 @@ from services.coros_mcp import (
     load_token,
     parse_user_weight,
 )
+from services.coros_web import CorosWebError, fetch_weight
 from services.format import format_meal_groups
 from services.nutrition import format_macros
 from services.weight_sync import decide_weight_sync
@@ -200,7 +208,7 @@ async def sync_coros_tdee(app: Application):
     start = yesterday - timedelta(days=6)
 
     try:
-        active_by_date, refresh_warning = fetch_and_persist(COROS_TOKEN_PATH, days=8)
+        active_by_date, token_notice = fetch_and_persist(COROS_TOKEN_PATH, days=8)
     except CorosMCPError as e:
         msg = f"⚠️ COROS 拉取失敗\n{e}\n請手動 /t 補昨日"
         logger.error("COROS sync failed: %s", e)
@@ -210,16 +218,11 @@ async def sync_coros_tdee(app: Application):
             logger.error("Failed to send Telegram alert: %s", send_err)
         return
 
-    if refresh_warning:
-        # refresh 失敗但已用既存 access_token 撈到資料：警示但不要求手動 /t。
-        # 本 job 每日一跑，天然限頻一則。
-        msg = (
-            "⚠️ COROS token refresh 失敗（已用既存 access_token 續行，TDEE 同步正常）\n"
-            f"{refresh_warning}\n"
-            "refresh 持續故障請注意 access_token 效期（約 30 天）"
-        )
+    if token_notice:
+        # token 端有事要講（已自動重新授權／無法自動續期）。資料照樣撈到了，
+        # 不要求手動 /t。本 job 每日一跑，天然限頻一則。
         try:
-            await app.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=msg)
+            await app.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=token_notice)
         except Exception as send_err:
             logger.error("Failed to send Telegram alert: %s", send_err)
 
@@ -253,21 +256,34 @@ async def sync_coros_tdee(app: Application):
             logger.error("Failed to send no-yesterday alert: %s", e)
 
 
+def _fetch_coros_weight() -> float | None:
+    """抓 COROS profile 體重：teamapi 帳密為主路徑，失敗退 MCP。抓不到回 None。
+
+    teamapi（`/account/login` 回應直接帶 weight）零 OAuth、沒有會壞掉的 token 狀態，
+    是比照 strava-sync 的主路徑；MCP 保留為 fallback，token 沿用 03:05
+    sync_coros_tdee 處理過的 access_token，本 job **不自己 refresh**（PRD US22，
+    把 rotation 風險集中在單一每日時點）。
+    """
+    if COROS_EMAIL and COROS_PASSWORD:
+        try:
+            return fetch_weight(COROS_EMAIL, COROS_PASSWORD)
+        except CorosWebError as e:
+            logger.warning("COROS teamapi 體重撈取失敗，改走 MCP fallback: %s", e)
+
+    token = load_token(COROS_TOKEN_PATH)
+    return parse_user_weight(fetch_user_info(token))
+
+
 async def sync_coros_weight(app: Application):
     """每日 10:29（主抓）+ 22:29（fallback）從 COROS profile 抓體重 → 決策 → upsert。
 
-    - token 沿用 03:05 sync_coros_tdee refresh 過的 access_token：本 job 走
-      load_token → fetch_user_info，**不自己 refresh**（PRD US22，把 rotation
-      風險集中在單一每日時點）。
     - 抓取 / 解析失敗一律當 fetched=None，交給 decide_weight_sync 走告警分支。
     - 決策由純函式 decide_weight_sync 負責：should_write → upsert；
       decision.message 不為 None → 推 Telegram（值同上次的輕提醒 / 抓取失敗 /
       跳變過大的告警）。fallback 透過「當天已有筆 → SKIP」自動成立，晨重優先。
     """
     try:
-        token = load_token(COROS_TOKEN_PATH)
-        text = fetch_user_info(token)
-        fetched = parse_user_weight(text)
+        fetched = _fetch_coros_weight()
     except Exception as e:  # 任何抓取 / 解析失敗 → 走 ALERT_NO_WRITE 分支
         logger.error("COROS weight sync fetch failed: %s", e)
         fetched = None
@@ -299,10 +315,11 @@ async def cleanup_expired_images(app: Application):
         return
 
     for row in expired:
-        path = row["image_path"]
-        if path and os.path.exists(path):
-            os.remove(path)
-            logger.info("Deleted expired image: %s", path)
+        # 相簿記錄的 image_path 是逗號串接的多個路徑（見 handlers/meal.py）
+        for path in (row["image_path"] or "").split(","):
+            if path and os.path.exists(path):
+                os.remove(path)
+                logger.info("Deleted expired image: %s", path)
         clear_image_path(row["id"])
 
     logger.info("Cleaned up %d expired images", len(expired))

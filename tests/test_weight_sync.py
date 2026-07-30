@@ -89,3 +89,48 @@ class TestDecideWeightSync:
     def test_negative_jump_exactly_3_does_not_trigger(self):
         d = decide_weight_sync(68.0, 71.0, today_has_row=False)  # diff -3.0
         assert d.action == WRITE_SILENT
+
+
+# ── 體重抓取路徑：teamapi 主、MCP fallback（與 strava-sync 一致的帳密路徑）──
+
+class TestFetchCorosWeightRouting:
+    def test_teamapi_used_when_credentials_present(self, monkeypatch):
+        import scheduler
+
+        monkeypatch.setattr(scheduler, "COROS_EMAIL", "u@example.com")
+        monkeypatch.setattr(scheduler, "COROS_PASSWORD", "pw")
+        monkeypatch.setattr(scheduler, "fetch_weight", lambda e, p: 72.4)
+        monkeypatch.setattr(scheduler, "load_token", _never_called)
+
+        assert scheduler._fetch_coros_weight() == 72.4
+
+    def test_falls_back_to_mcp_when_teamapi_fails(self, monkeypatch):
+        import scheduler
+        from services.coros_web import CorosWebError
+
+        monkeypatch.setattr(scheduler, "COROS_EMAIL", "u@example.com")
+        monkeypatch.setattr(scheduler, "COROS_PASSWORD", "pw")
+
+        def boom(email, password):
+            raise CorosWebError("login 認證失敗 result=1004")
+
+        monkeypatch.setattr(scheduler, "fetch_weight", boom)
+        monkeypatch.setattr(scheduler, "load_token", lambda path: {"access_token": "a"})
+        monkeypatch.setattr(scheduler, "fetch_user_info", lambda tok: "Weight: 71.9 kg")
+
+        assert scheduler._fetch_coros_weight() == 71.9
+
+    def test_mcp_only_when_no_credentials(self, monkeypatch):
+        import scheduler
+
+        monkeypatch.setattr(scheduler, "COROS_EMAIL", "")
+        monkeypatch.setattr(scheduler, "COROS_PASSWORD", "")
+        monkeypatch.setattr(scheduler, "fetch_weight", _never_called)
+        monkeypatch.setattr(scheduler, "load_token", lambda path: {"access_token": "a"})
+        monkeypatch.setattr(scheduler, "fetch_user_info", lambda tok: "Weight: 70.5 kg")
+
+        assert scheduler._fetch_coros_weight() == 70.5
+
+
+def _never_called(*args, **kwargs):
+    raise AssertionError("不該走到這條路徑")

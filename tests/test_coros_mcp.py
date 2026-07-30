@@ -283,3 +283,151 @@ class TestFetchAndPersist:
                 fetch_and_persist(path)
         # 兩層脈絡都要在訊息裡（告警可區分是哪裡的問題）
         assert "503" in str(ei.value) and "500" in str(ei.value)
+
+
+# ── access_token 效期 + 自動重新授權（GitHub #28 後續：refresh 500 續命方案）──
+
+def _jwt_with_exp(exp_ts: int) -> str:
+    """組一個只有 payload 有意義的假 JWT（access_token_expires_at 只讀 exp）。"""
+    import base64
+
+    def seg(obj) -> str:
+        return base64.urlsafe_b64encode(json.dumps(obj).encode()).rstrip(b"=").decode()
+
+    return f"{seg({'alg': 'none'})}.{seg({'exp': exp_ts})}.sig"
+
+
+class TestAccessTokenExpiresAt:
+    def test_reads_exp_from_jwt(self):
+        from datetime import datetime, timezone
+
+        from services.coros_mcp import access_token_expires_at
+
+        exp = int(datetime(2026, 8, 16, 19, 5, tzinfo=timezone.utc).timestamp())
+        got = access_token_expires_at({"access_token": _jwt_with_exp(exp)})
+        assert got == datetime(2026, 8, 16, 19, 5, tzinfo=timezone.utc)
+
+    @pytest.mark.parametrize("token", [
+        {"access_token": "not-a-jwt"},
+        {"access_token": "a.b.c"},          # 段數對但 payload 不是 base64 JSON
+        {},                                  # 完全沒有 access_token
+    ])
+    def test_unreadable_returns_none(self, token):
+        from services.coros_mcp import access_token_expires_at
+
+        assert access_token_expires_at(token) is None
+
+
+class TestEnsureToken:
+    """近到期 → 帳密重新授權；否則走 refresh。沒憑證時退回舊警示行為。"""
+
+    def _token_file(self, tmp_path: Path, days_left: float) -> Path:
+        from datetime import datetime, timedelta, timezone
+
+        exp = int((datetime.now(timezone.utc) + timedelta(days=days_left)).timestamp())
+        path = tmp_path / "tok.json"
+        save_token(path, {
+            "client_id": "c", "refresh_token": "r", "access_token": _jwt_with_exp(exp),
+        })
+        return path
+
+    def test_near_expiry_with_credentials_rebootstraps(self, tmp_path: Path, monkeypatch):
+        from services.coros_mcp import ensure_token
+
+        path = self._token_file(tmp_path, days_left=1)
+        monkeypatch.setattr("services.coros_mcp.COROS_EMAIL", "u@example.com")
+        monkeypatch.setattr("services.coros_mcp.COROS_PASSWORD", "pw")
+        called = {}
+
+        def fake_bootstrap(email, password, token_path, existing=None):
+            called["args"] = (email, password, token_path)
+            return {**existing, "access_token": "fresh"}
+
+        monkeypatch.setattr("services.coros_mcp.bootstrap_token", fake_bootstrap)
+        with patch("services.coros_mcp_core.refresh_access_token") as refresh:
+            token, notice = ensure_token(path)
+
+        assert called["args"] == ("u@example.com", "pw", path)
+        assert token["access_token"] == "fresh"
+        assert notice is not None and "重新授權" in notice
+        refresh.assert_not_called()  # 近到期直接換新的，不浪費一次必定 500 的 refresh
+
+    def test_near_expiry_without_credentials_warns_only(self, tmp_path: Path, monkeypatch):
+        from services.coros_mcp import ensure_token
+
+        path = self._token_file(tmp_path, days_left=1)
+        monkeypatch.setattr("services.coros_mcp.COROS_EMAIL", "")
+        monkeypatch.setattr("services.coros_mcp.COROS_PASSWORD", "")
+        token, notice = ensure_token(path)
+
+        assert token["access_token"].startswith("ey") or "." in token["access_token"]
+        assert notice is not None and "coros_mcp_bootstrap.py" in notice
+
+    def test_healthy_token_goes_through_refresh(self, tmp_path: Path, monkeypatch):
+        from services.coros_mcp import ensure_token
+
+        path = self._token_file(tmp_path, days_left=20)
+        monkeypatch.setattr("services.coros_mcp.COROS_EMAIL", "u@example.com")
+        monkeypatch.setattr("services.coros_mcp.COROS_PASSWORD", "pw")
+        monkeypatch.setattr("services.coros_mcp.bootstrap_token", _never_called)
+
+        with patch("services.coros_mcp_core.refresh_access_token",
+                   side_effect=lambda tok: {**tok, "refresh_token": "r-new"}):
+            token, notice = ensure_token(path)
+
+        assert token["refresh_token"] == "r-new"
+        assert notice is None
+
+    def test_refresh_failure_silent_when_auto_renew_available(self, tmp_path: Path, monkeypatch):
+        """有帳密兜底時，refresh 500 只記 log 不推播（否則每天一則噪音）。"""
+        from services.coros_mcp import ensure_token
+
+        path = self._token_file(tmp_path, days_left=20)
+        monkeypatch.setattr("services.coros_mcp.COROS_EMAIL", "u@example.com")
+        monkeypatch.setattr("services.coros_mcp.COROS_PASSWORD", "pw")
+        monkeypatch.setattr("services.coros_mcp.bootstrap_token", _never_called)
+
+        with patch("services.coros_mcp_core.refresh_access_token",
+                   side_effect=CorosMCPError("refresh 失敗 status=500")):
+            token, notice = ensure_token(path)
+
+        assert notice is None
+        assert token["refresh_token"] == "r"  # 退用既存 token 續行
+
+
+def _never_called(*args, **kwargs):
+    raise AssertionError("不該呼叫 bootstrap_token")
+
+
+class TestFetchRetriesWithBootstrap:
+    def test_fetch_failure_triggers_rebootstrap_and_retry(self, tmp_path: Path, monkeypatch):
+        """token 沒到期卻被拒收（提早失效）→ 帳密重新授權後再撈一次。"""
+        from datetime import datetime, timedelta, timezone
+
+        exp = int((datetime.now(timezone.utc) + timedelta(days=20)).timestamp())
+        path = tmp_path / "tok.json"
+        save_token(path, {"client_id": "c", "refresh_token": "r",
+                          "access_token": _jwt_with_exp(exp)})
+        monkeypatch.setattr("services.coros_mcp.COROS_EMAIL", "u@example.com")
+        monkeypatch.setattr("services.coros_mcp.COROS_PASSWORD", "pw")
+        monkeypatch.setattr(
+            "services.coros_mcp.bootstrap_token",
+            lambda *a, **kw: {"access_token": "fresh", "refresh_token": "r2"},
+        )
+
+        attempts = []
+
+        def fake_fetch(tok, days=2, tz="Asia/Taipei"):
+            attempts.append(tok["access_token"])
+            if len(attempts) == 1:
+                raise CorosMCPError("MCP 呼叫失敗 status=401")
+            return "--- 20260730 ---\nCalories: 900 kcal\n"
+
+        with patch("services.coros_mcp_core.refresh_access_token",
+                   side_effect=CorosMCPError("refresh 失敗 status=500")), \
+             patch("services.coros_mcp.fetch_daily_health", side_effect=fake_fetch):
+            result, notice = fetch_and_persist(path)
+
+        assert len(attempts) == 2 and attempts[1] == "fresh"
+        assert result == {date(2026, 7, 30): 900}
+        assert notice is not None and "重新授權" in notice

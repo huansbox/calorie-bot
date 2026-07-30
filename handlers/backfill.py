@@ -230,7 +230,9 @@ async def _process_backfill(
     processing_msg = await update.message.reply_text("分析中...")
 
     try:
-        result = await analyze_food(text=text, image_path=image_path)
+        result = await analyze_food(
+            text=text, image_paths=[image_path] if image_path else None,
+        )
     except Exception:
         logger.exception("AI analysis failed (backfill)")
         await processing_msg.edit_text("分析失敗，請重試。")
