@@ -1,4 +1,8 @@
-"""Test COROS MCP service：純文字解析 + token rotation 邏輯（不打外網）。"""
+"""Test COROS MCP service：純文字解析 + token rotation 邏輯（不打外網）。
+
+預設把 COROS 帳密清空（見 _no_coros_credentials）：有沒有帳密會改變 token 續命
+的分支，測試不能跟著開發機 .env 飄。需要帳密的案例自己 monkeypatch 設回去。
+"""
 import json
 from datetime import date
 from pathlib import Path
@@ -16,6 +20,12 @@ from services.coros_mcp import (
     refresh_with_fallback,
     save_token,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_coros_credentials(monkeypatch):
+    monkeypatch.setattr("services.coros_mcp.COROS_EMAIL", "")
+    monkeypatch.setattr("services.coros_mcp.COROS_PASSWORD", "")
 
 
 # ── parse_daily_health ─────────────────────────────────────
