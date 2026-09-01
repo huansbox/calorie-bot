@@ -332,14 +332,20 @@ UPDATE_REMINDER_TEXT = """每月 claude binary 更新提醒。把下面整段貼
 可以動 binary 與版本目錄，但不要 restart bot、不要改 .env 或 systemd 設定：
 1. 記更新前版本：ssh root@107.175.30.172 "sudo -u botuser /home/botuser/.local/bin/claude --version"
 2. 更新：同上路徑 claude update
-3. smoke（文字）：claude -p 'ping, 回簡短 JSON' --model sonnet --output-format json，確認回得出 result/modelUsage
-   若 data/media 有現存圖，順手測圖片路徑：... -p '描述這張圖：<路徑>' --model sonnet --output-format json --allowedTools Read；沒有就略過（下一餐真實照片會驗）
-   smoke 若回 "OAuth session expired and could not be refreshed"（modelUsage 空、~/.claude/.credentials.json 的 token 被清成空字串）：
-   這是 fallback 的預期失效模式——claude -p 只在 gemini 失敗時才被呼叫，長期沒用到 refresh token 就會過期，
-   而 bot 環境沒有 ANTHROPIC_API_KEY，OAuth 是唯一認證來源。修法是人工重新登入（互動式，代跑不了）：
-   ssh 進 VPS 跑 sudo -u botuser -H /home/botuser/.local/bin/claude setup-token，照印出的 URL 授權完再重跑 smoke。
+3. smoke（文字）。認證是 CLAUDE_CODE_OAUTH_TOKEN，只活在 bot 的 op run 環境裡，
+   SSH 進去直接跑 claude -p 一定失敗（~/.claude/.credentials.json 是空的），要自己注入：
+     set -a; . /etc/calorie-bot/op-token.env; set +a
+     export CLAUDE_CODE_OAUTH_TOKEN=$(op read "op://Developer/Calorie Bot/CLAUDE_CODE_OAUTH_TOKEN")
+     sudo -u botuser -H --preserve-env=CLAUDE_CODE_OAUTH_TOKEN /home/botuser/.local/bin/claude \\
+       -p 'ping, 回簡短 JSON' --model sonnet --output-format json < /dev/null
+   結尾的 < /dev/null 是必要的：用 heredoc 餵 bash 時 claude 會把剩下的 script 當 stdin 吃掉，變成沒有輸出。
+   若 data/media 有現存圖，順手加測圖片路徑：-p '描述這張圖：<路徑>' --allowedTools Read；沒有就略過（下一餐真實照片會驗）
+   若回 "OAuth session expired" 或 is_error=true：token 過期或被撤銷（1 年期，2027-09-01 到期）。
+   修法：sudo -u botuser -H claude setup-token（互動式，Claude Code session 代跑不了）→ 新 token 存回
+   1Password Developer/Calorie Bot 的 CLAUDE_CODE_OAUTH_TOKEN 欄位 → restart bot（.env 參照不用改）。
    主路徑 gemini 不受影響，bot 仍能正常記錄，只是暫時沒有備援。
-4. 記新版本 + `--model sonnet` 現在解析到的模型（modelUsage 的 key），跟舊版比對有無跳版
+4. 記新版本 + `--model sonnet` 現在解析到的模型：看 modelUsage 裡的 sonnet 那個 key
+   （ping 這種極短輸入下內部 haiku 的用量會反超 sonnet，別直接取用量最大的），跟舊版比對有無跳版
 5. prune ~/.local/share/claude/versions/ 保留最新 2 版、刪其餘
 6. 回報：舊版→新版、模型有無變化、smoke 過否。binary 換版下次 claude -p 自動生效，不需 restart。
 ————"""
