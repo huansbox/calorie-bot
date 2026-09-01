@@ -1,33 +1,32 @@
 # HANDOFF
 
 - Status: idle
-- Task/issue: Telegram 相簿合併判讀 + COROS 體重改走 teamapi + MCP token 帳密自動續期（解 7/18 起 refresh 500 導致 8/17 全斷的死線）
+- Task/issue: no tracker entry — 9/01 月更新提醒觸發的 claude CLI 維護，過程中發現並修復 claude -p fallback 的認證失效
 - Branch: main
-- Updated: 2026-07-30
+- Updated: 2026-09-01
 
 ## Progress
 
-- **相簿合併**（`022a8ff`）：Telegram 相簿被拆成 N 個 message（只有第一張帶 caption），原本逐張各判讀一次 → 3 張同餐照片變 3 筆、caption 涵蓋的菜色被重複計算（實案多算 642 kcal）。改為依 `media_group_id` 緩衝 2 秒收齊後合併送一次 AI、寫一筆；`analyze_food` 改收 `image_paths`（三條 provider 路徑皆支援），相簿路徑逗號串接存 `meals.image_path`、清理排程拆開刪
-- **COROS 體重改走 teamapi**（`04ea25a`）：`services/coros_web.py` 帳密登入，`/account/login` 回應直接帶 `weight`（零 OAuth、單一請求），MCP `queryUserInfo` 降 fallback。比照 strava-sync GitHub #31
-- **TDEE 搬不動、改讓 MCP 自己續命**：含 NEAT 的每日活動消耗只有 MCP `queryDailyHealthData` 有——teamapi 沒有（2026-07-30 掃過 Training Hub 前端 bundle 完整端點清單、額外命名、`teamcnapi`、`api.coros.com`；teamapi 只有單場活動 calorie，口徑不同）。故新增 `services/coros_oauth.py`：token 剩 < 3 天時用帳密跑完整 OAuth authorize flow 換新 token，**免瀏覽器**（DCR → authorize → openus 表單登入 → 攔 localhost callback 取 code → PKCE 換 token），token 檔存 `redirect_uri` 供之後重用 client。撈取失敗但 token 未到期也會重新授權後重試一次。實測坑：登入表單預設 `country=CN` 回 `result 1001`（要送 `TW`）、POST 缺 `Origin` 或瀏覽器型 UA 同樣 1001
-- **告警調整**：有帳密兜底時 refresh 500 只記 log 不推播（原本每天一則噪音）；沒帳密時維持舊警示行為
-- **密鑰**：1Password `Developer / Calorie Bot` 新增 `COROS_EMAIL`(text) / `COROS_PASSWORD`(concealed)，本機與 VPS `.env` 加 `op://` 參照（VPS 備份 `.env.bak-20260730`）
-- **VPS 已部署**：merge `28cfacb`，service active；token 換成新的一份（效期 8/16 → **8/29**，舊的備份在 `data/coros-token.json.bak-20260730`）
-- **觀察項（非阻塞）**：① 自動續期首次真實觸發約 **8/26 03:05**，成功會推「🔑 COROS token 已自動重新授權」——沒收到且隔天 TDEE 缺就要查；② COROS 若修好 refresh，rotation 會自動恢復（程式仍照試）；③ 帳密路徑的失效條件：改密碼（需同步更新 1Password 欄位）、開 2FA、登入頁改版／加 captcha，三者都會先發 Telegram 告警且有 3 天緩衝
-- **本次順手處理**：刪除 7/30 16:26–16:27 三筆重複餐點（今日 5938 → 3326 kcal）、刪除誤加的快取 28 排骨飯便當 / 29 白吐司2片+藍莓果醬（剩 17 筆）
+- **claude binary 更新**：VPS botuser 的 CLI `2.1.197 → 2.1.252`，symlink 自動重指，prune 掉 `2.1.96`（versions 目錄留 2.1.197 + 2.1.252，439M）。`--model sonnet` 仍解析到 `claude-sonnet-5`，沒跳版
+- **發現 fallback 認證早已失效**：smoke 回 `OAuth session expired and could not be refreshed`，`~/.claude/.credentials.json` 的 token 被 CLI 清成空字串。根因不是這次更新——journal 顯示最後一次成功的 `claude -p` 是 **2026-07-18 05:07**（切 gemini 當天一次 429 fallback），之後 6 週零呼叫；那份短期 token 只在 `claude -p` 實際執行時才會 refresh，沒被呼叫就靜靜過期。credentials 被清空的時點（09:42:56 UTC）早於新 binary 寫入，是 CLI 啟動時 refresh 失敗所致，更新只是把它暴露出來
+- **改用長效 OAuth token**（`b9e013b`）：`claude setup-token` 產生的 1 年期 token（**2027-09-01 到期**）存進 1Password `Developer / Calorie Bot` 的 `CLAUDE_CODE_OAUTH_TOKEN` 欄位，VPS `.env` 加 `op://` 參照注入（舊檔備份 `.env.bak.20260901`）。關鍵事實：`setup-token` **不會**寫回 credentials 檔，它產的 token 只能透過環境變數使用。長效 token 沒有「不用就壞」的性質
+- **月提醒改寫兩輪**（`3d6b9d4` → `b9e013b`）：① 開頭「唯讀報告」與 step 2/5 實際會寫入矛盾，改成「不要 restart bot、不要改 .env 或 systemd 設定」；② step 3 補失敗分支與**必要的 token 注入指令**——SSH 進去直接跑 `claude -p` 必定失敗（credentials 檔是空的），提醒現在直接給注入三行；③ 補 `< /dev/null`（heredoc 餵 bash 時 claude 會把剩下的 script 當 stdin 吃掉，症狀是完全無輸出，本次實際踩到）；④ step 4 警告 ping 這種極短輸入下內部 haiku 用量會反超 sonnet，別直接取 modelUsage 用量最大者
+- **`services/ai.py` 的取模型邏輯經檢視無誤**：真實判讀時 SYSTEM_PROMPT 2415 字，sonnet 的 inputTokens 穩壓 haiku 的約 900，「取用量最大者」成立；問題只在 ping smoke 測不出來，已寫進提醒
+- **驗證過上一個 session 的 COROS 觀察項**：8/31 19:05 UTC（台北 9/01 03:05）的 TDEE 同步 log 顯示 `refresh_token rotated` 成功、抓到 8 天 daily health、寫入 8/31 = 3550 kcal。COROS 的 refresh 500 已自行修復，rotation 恢復正常，帳密自動重新授權因此從未真的觸發（journal 8/20 起無相關事件）
+- **文件**：`CLAUDE.md` 新增「claude -p 認證＝長效 OAuth token」設計決策（含 2027-09 換發流程、為何不再用 credentials 檔、`ANTHROPIC_API_KEY` 註解狀態使 OAuth 成為唯一認證來源），1Password 欄位清單補 `CLAUDE_CODE_OAUTH_TOKEN`
 
 ## Next step
 
-None
+None。本 session 提出但**使用者未表態、故未建立 tracker 項目**的一件事：fallback 的健康度目前只有每月 1 號的手動提醒會檢出，中間任何時候壞掉都不會告警（這次就是壞了 6 週沒人知道）。若要補，最省的做法是加一個定期跑 `claude -p` smoke、失敗推 Telegram 的排程 job；這超出本次範圍，下個 session 應把它當「要不要做」的問題問，而不是當已核可的任務。其餘查過的地方：`issues/` 001–008 全數完成、GitHub 無 open issue、`CLAUDE.md`「進行中的設計」的 gemini／prompt v2 觀察清單都是持續觀察性質，沒有待辦動作。
 
 ## Validation
 
-- `uv run pytest` 231 passed（新增 test_meal_media_group.py 4、test_coros_web.py 11、test_coros_mcp.py 擴至 38、test_weight_sync.py 擴至 17）
-- 本機實測：teamapi 體重 72.0（與 MCP 值一致）、帳密自動授權拿到 exp 8/29 的 token 並撈得到 daily health、第二次續期重用同一 client 成功
-- **VPS 實測**：帳密解析成功、teamapi 體重 72.0、`ensure_token` notice 為 None（refresh 500 已靜默）、MCP `queryDailyHealthData` 回 3 天資料、`queryUserInfo` 回 72.0；**VPS 端自動授權實跑一次通過**（寫暫存檔、驗證後刪除）
-- **正式環境驗證相簿合併**：使用者重傳同樣三張照片＋說明 → 只產一筆 1911 kcal（原本 3 筆），與舊的第一筆 1970 同量級
-- 測試隔離修正：`test_coros_mcp.py` 加 autouse fixture 清空 COROS 帳密，避免測試跟著開發機 `.env` 飄
-- 未跑：8/26 自動續期的真實排程觸發（等時間到）
+- `uv run pytest -q` 231 passed（兩次：改提醒文字後、改 CLAUDE.md 後）
+- `uv run python -c "import scheduler; print(UPDATE_REMINDER_TEXT)"` 確認提醒可正常組出，長度 1486 字元（Telegram 上限 4096）
+- **VPS 實測 claude -p**：注入 `CLAUDE_CODE_OAUTH_TOKEN` 後 `exit=0`、`is_error=false`、`result` 回合法 JSON、`modelUsage` 含 `claude-sonnet-5`
+- **VPS 環境驗證**：restart 後確認 bot 子行程 environ 內有 `CLAUDE_CODE_OAUTH_TOKEN`；service `active`，排程正常註冊
+- 已部署：VPS `git log -1` = `143b49b`
+- 未跑：真實 fallback 端到端（要 gemini 失敗才會觸發，無法自造）；圖片路徑 smoke（下一餐真實照片會驗）
 
 ## Blockers
 
