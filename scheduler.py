@@ -328,11 +328,17 @@ async def cleanup_expired_images(app: Application):
 UPDATE_REMINDER_TEXT = """每月 claude binary 更新提醒。把下面整段貼給一個能 SSH 到 VPS 的 Claude Code session：
 
 ————
-更新 calorie-bot VPS（root@107.175.30.172）上 botuser 的 claude binary 並驗證，唯讀報告、不要 restart bot：
+更新 calorie-bot VPS（root@107.175.30.172）上 botuser 的 claude binary 並驗證。
+可以動 binary 與版本目錄，但不要 restart bot、不要改 .env 或 systemd 設定：
 1. 記更新前版本：ssh root@107.175.30.172 "sudo -u botuser /home/botuser/.local/bin/claude --version"
 2. 更新：同上路徑 claude update
 3. smoke（文字）：claude -p 'ping, 回簡短 JSON' --model sonnet --output-format json，確認回得出 result/modelUsage
    若 data/media 有現存圖，順手測圖片路徑：... -p '描述這張圖：<路徑>' --model sonnet --output-format json --allowedTools Read；沒有就略過（下一餐真實照片會驗）
+   smoke 若回 "OAuth session expired and could not be refreshed"（modelUsage 空、~/.claude/.credentials.json 的 token 被清成空字串）：
+   這是 fallback 的預期失效模式——claude -p 只在 gemini 失敗時才被呼叫，長期沒用到 refresh token 就會過期，
+   而 bot 環境沒有 ANTHROPIC_API_KEY，OAuth 是唯一認證來源。修法是人工重新登入（互動式，代跑不了）：
+   ssh 進 VPS 跑 sudo -u botuser -H /home/botuser/.local/bin/claude setup-token，照印出的 URL 授權完再重跑 smoke。
+   主路徑 gemini 不受影響，bot 仍能正常記錄，只是暫時沒有備援。
 4. 記新版本 + `--model sonnet` 現在解析到的模型（modelUsage 的 key），跟舊版比對有無跳版
 5. prune ~/.local/share/claude/versions/ 保留最新 2 版、刪其餘
 6. 回報：舊版→新版、模型有無變化、smoke 過否。binary 換版下次 claude -p 自動生效，不需 restart。
