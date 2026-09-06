@@ -10,7 +10,9 @@ from services.ai import (
     _model_total_tokens,
     _normalize_model_name,
     analyze_food,
+    consume_primary_alert,
     parse_ai_response,
+    push_primary_alert,
 )
 
 
@@ -391,3 +393,93 @@ class TestModelTotalTokens:
 
     def test_empty_usage(self):
         assert _model_total_tokens({}) == 0
+
+
+# ── 主路徑失敗告警 ────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _reset_primary_alert_state():
+    """module-level 狀態，測試間必須歸零。"""
+    services.ai._primary_down = False
+    services.ai._pending_alert = None
+    yield
+    services.ai._primary_down = False
+    services.ai._pending_alert = None
+
+
+class TestPrimaryPathAlert:
+    def test_first_failure_produces_alert(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr("services.ai.AI_PROVIDER", "gemini")
+        _patch_analyzers(monkeypatch, calls, gemini_raises=True)
+        asyncio.run(analyze_food(text="滷肉飯"))
+        msg = consume_primary_alert()
+        assert msg is not None
+        assert "gemini" in msg
+        assert "gemini boom" in msg
+
+    def test_repeated_failure_alerts_only_once(self, monkeypatch):
+        """持續失敗不重複推播（每餐都推等於噪音）。"""
+        calls = []
+        monkeypatch.setattr("services.ai.AI_PROVIDER", "gemini")
+        _patch_analyzers(monkeypatch, calls, gemini_raises=True)
+        asyncio.run(analyze_food(text="滷肉飯"))
+        assert consume_primary_alert() is not None
+        asyncio.run(analyze_food(text="鮪魚蛋餅"))
+        asyncio.run(analyze_food(text="葡式蛋塔"))
+        assert consume_primary_alert() is None
+
+    def test_recovery_produces_alert(self, monkeypatch):
+        monkeypatch.setattr("services.ai.AI_PROVIDER", "gemini")
+        _patch_analyzers(monkeypatch, [], gemini_raises=True)
+        asyncio.run(analyze_food(text="滷肉飯"))
+        consume_primary_alert()
+
+        _patch_analyzers(monkeypatch, [], gemini_raises=False)
+        asyncio.run(analyze_food(text="滷肉飯"))
+        msg = consume_primary_alert()
+        assert msg is not None
+        assert "恢復" in msg
+
+    def test_healthy_path_stays_silent(self, monkeypatch):
+        """一路正常 → 完全不推播。"""
+        monkeypatch.setattr("services.ai.AI_PROVIDER", "gemini")
+        _patch_analyzers(monkeypatch, [], gemini_raises=False)
+        asyncio.run(analyze_food(text="滷肉飯"))
+        asyncio.run(analyze_food(text="鮪魚蛋餅"))
+        assert consume_primary_alert() is None
+
+    def test_consume_clears_state(self):
+        services.ai._pending_alert = "測試訊息"
+        assert consume_primary_alert() == "測試訊息"
+        assert consume_primary_alert() is None
+
+
+class TestPushPrimaryAlert:
+    def test_sends_pending_message(self):
+        sent = []
+
+        async def fake_send(msg):
+            sent.append(msg)
+
+        services.ai._pending_alert = "測試訊息"
+        asyncio.run(push_primary_alert(fake_send))
+        assert sent == ["測試訊息"]
+
+    def test_no_message_no_send(self):
+        sent = []
+
+        async def fake_send(msg):
+            sent.append(msg)
+
+        asyncio.run(push_primary_alert(fake_send))
+        assert sent == []
+
+    def test_send_failure_is_swallowed(self):
+        """推播失敗不能影響本來要回給使用者的判讀結果。"""
+        async def boom(msg):
+            raise RuntimeError("telegram down")
+
+        services.ai._pending_alert = "測試訊息"
+        asyncio.run(push_primary_alert(boom))  # 不得往外拋
