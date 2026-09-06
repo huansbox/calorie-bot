@@ -194,3 +194,13 @@ token 之後會被 rotation 寫回原檔（atomic rename），botuser 需有該�
 - 服務名稱: calorie-bot.service（`op run` 透過 EnvironmentFile 載入 Service Account token）
 - Service Account token: `/etc/calorie-bot/op-token.env`（權限 600，root only）
 - GitHub remote: https://github.com/huansbox/calorie-bot.git (public)
+
+### SSH 加固與 log 噪音（2026-09-06）
+
+VPS 原本 `PasswordAuthentication yes` + `PermitRootLogin yes`，24 小時內實測 **9,612 次 Failed password、5,241 次 Invalid user、174 個不重複來源 IP** 的持續暴力破解（過去 30 天 `Accepted password` = 0，未被攻破）。這些 sshd 訊息佔 journal 的 **78.7%**，`httpx` 的 getUpdates INFO 再佔 **17.6%**——真正有診斷價值的每天只剩約 1,700 行。
+
+三項處置：
+
+1. **`/etc/ssh/sshd_config.d/10-hardening.conf`**：`PasswordAuthentication no` + `PermitRootLogin prohibit-password` + `KbdInteractiveAuthentication no`。**檔名前綴必須小於 `50-cloud-init.conf`**——sshd_config 取「第一個出現」的值不是最後一個，而 `50-cloud-init.conf` 正是 `PasswordAuthentication yes` 的來源；用 `99-` 會靜默失效且 `sshd -t` 不報錯。改完用 `sshd -T` 確認解析後的有效值，再開新連線驗證。登入一律走 publickey，root 的 `authorized_keys` 有 `calobot-vps` 與 `macbook-calorie-bot` 兩把。
+2. **`main.py` 把 `httpx` logger 設 WARNING**：polling 每 10 秒一筆 getUpdates 200 OK＝8,640 行/天，無診斷價值；失敗仍以 WARNING 以上留下。
+3. **`/etc/systemd/journald.conf.d/10-retention.conf`**：`MaxRetentionSec=180d`，`SystemMaxUse` 維持預設（檔案系統 10% = 2.4G）當容量上限。原本 2.3G 剛好收斂在預設上限＝93 天；噪音消除後每日約 0.9MB，180 天約 162MB，時間會成為第一約束。

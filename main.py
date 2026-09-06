@@ -40,6 +40,10 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
+# polling 每 10 秒打一次 getUpdates，httpx 每次都記一行 INFO「200 OK」＝ 8,640 行/天，
+# 佔 bot 全部 log 的 97.9%，把真正有內容的訊息淹掉（2026-09-06 實測）。成功的
+# getUpdates 沒有診斷價值；失敗仍會以 WARNING 以上留下。
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
