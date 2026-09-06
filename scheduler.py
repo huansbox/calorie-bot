@@ -330,6 +330,10 @@ def sweep_orphan_media(
     cutoff = datetime.now(timezone.utc).timestamp() - max_age_hours * 3600
     removed = 0
     for name in os.listdir(media_dir):
+        # dotfile 不是暫存照片：data/media/.gitkeep 是版控用的佔位檔，會被這裡
+        # 的年齡條件命中（它永遠是最舊的那個）
+        if name.startswith("."):
+            continue
         path = os.path.join(media_dir, name)
         try:
             if not os.path.isfile(path) or os.path.getmtime(path) >= cutoff:
