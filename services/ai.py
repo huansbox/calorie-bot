@@ -121,6 +121,22 @@ def _normalize_model_name(raw: str) -> str:
     return re.sub(r"\[.*?\]$", "", raw).strip()
 
 
+# claude -p 的 modelUsage 各模型可能出現的 token 欄位。主判讀模型的 system prompt
+# 幾乎全進 prompt cache，inputTokens 只剩個位數，故計分必須含 cache 兩欄，否則會被
+# 沒有 cache 的內部 haiku（inputTokens ~900）壓過去（2026-09-04~09-05 誤記實案）。
+_MODEL_USAGE_TOKEN_FIELDS = (
+    "inputTokens",
+    "outputTokens",
+    "cacheReadInputTokens",
+    "cacheCreationInputTokens",
+)
+
+
+def _model_total_tokens(usage: dict) -> int:
+    """modelUsage 單一模型的總 token 量（含 prompt cache）。"""
+    return sum(usage.get(field, 0) or 0 for field in _MODEL_USAGE_TOKEN_FIELDS)
+
+
 def parse_ai_response(raw: str) -> FoodAnalysis:
     """解析 AI 回傳的 JSON 字串為 FoodAnalysis。
 
@@ -401,11 +417,7 @@ async def _analyze_claude_cli(
     # 是用量最大的那個；不能取第一個 key，否則會抓到內部 haiku 而非 --model 指定的模型。
     model_usage = output.get("modelUsage") or {}
     if model_usage:
-        raw_model = max(
-            model_usage,
-            key=lambda m: (model_usage[m].get("inputTokens", 0) or 0)
-            + (model_usage[m].get("outputTokens", 0) or 0),
-        )
+        raw_model = max(model_usage, key=lambda m: _model_total_tokens(model_usage[m]))
         result.ai_model = _normalize_model_name(raw_model)
     else:
         logger.warning("claude -p 回傳缺少 modelUsage 欄位")

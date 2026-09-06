@@ -7,6 +7,7 @@ import services.ai
 from services.ai import (
     FoodAnalysis,
     _analyze_claude_cli,
+    _model_total_tokens,
     _normalize_model_name,
     analyze_food,
     parse_ai_response,
@@ -329,3 +330,64 @@ def test_ai_model_picks_main_model_not_internal_haiku(monkeypatch):
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
     result = asyncio.run(_analyze_claude_cli(text="滷肉飯"))
     assert result.ai_model == "claude-sonnet-5"
+
+
+class _FakeProcCachedMainModel:
+    """CLI 2.1.222 實測 envelope：主判讀模型的 prompt 幾乎全進 cache，
+    inputTokens 只剩個位數，總量得含 cacheRead/cacheCreation 才勝過內部 haiku。"""
+
+    returncode = 0
+
+    async def communicate(self):
+        envelope = json.dumps(
+            {
+                "result": '{"description":"葡式蛋塔 1顆","protein_g":4.0,"carbs_g":18.0,"fat_g":11.0,"confidence":"medium","note":"推估：市售 60g/顆"}',
+                "usage": {"input_tokens": 2, "output_tokens": 88},
+                "modelUsage": {
+                    "claude-haiku-4-5-20251001": {
+                        "inputTokens": 911,
+                        "outputTokens": 15,
+                        "cacheReadInputTokens": 0,
+                        "cacheCreationInputTokens": 0,
+                    },
+                    "claude-sonnet-5": {
+                        "inputTokens": 2,
+                        "outputTokens": 88,
+                        "cacheReadInputTokens": 18543,
+                        "cacheCreationInputTokens": 21219,
+                    },
+                },
+            }
+        )
+        return envelope.encode("utf-8"), b""
+
+
+def test_ai_model_counts_cache_tokens(monkeypatch):
+    """主判讀模型走 prompt cache 時仍要被選中（不含 cache 會誤記成 haiku）。"""
+    async def fake_exec(*cmd, **kwargs):
+        return _FakeProcCachedMainModel()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    result = asyncio.run(_analyze_claude_cli(text="葡式蛋塔 1顆"))
+    assert result.ai_model == "claude-sonnet-5"
+
+
+class TestModelTotalTokens:
+    def test_sums_all_token_fields(self):
+        usage = {
+            "inputTokens": 2,
+            "outputTokens": 88,
+            "cacheReadInputTokens": 18543,
+            "cacheCreationInputTokens": 21219,
+        }
+        assert _model_total_tokens(usage) == 39852
+
+    def test_missing_cache_fields_default_to_zero(self):
+        assert _model_total_tokens({"inputTokens": 911, "outputTokens": 15}) == 926
+
+    def test_none_values_treated_as_zero(self):
+        usage = {"inputTokens": None, "outputTokens": 88, "cacheReadInputTokens": None}
+        assert _model_total_tokens(usage) == 88
+
+    def test_empty_usage(self):
+        assert _model_total_tokens({}) == 0
