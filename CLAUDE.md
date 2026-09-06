@@ -71,6 +71,7 @@ tests/
   test_meal_media_group.py # Telegram 相簿聚合（多張照片合併成一次判讀）(4 cases)
   test_weight_sync.py # decide_weight_sync 真值表 + 閾值邊界測試 (14 cases)
   test_dates.py      # parse_mmdd 測試 (8 cases，含退一年邏輯)
+  test_scheduler.py  # sweep_orphan_media 兜底掃描測試 (9 cases，含年齡邊界與刪除失敗)
   test_format.py     # format_meal_groups 測試 (8 cases，強制餐別與空 placeholder)
 docs/                # 設計探索文件（如 cli-model-tracking-design.md）
 wiki/                # GitHub wiki 頁面（唯一編輯處，CI 自動發佈到 .wiki.git）
@@ -109,7 +110,7 @@ wiki/                # GitHub wiki 頁面（唯一編輯處，CI 自動發佈到
 - **Gemini JSON mode**：response_mime_type + response_json_schema 強制合法 JSON 輸出
 - **Claude JSON 容錯**：parse_ai_response 處理 code fence、畸形 JSON (如 `>` 替代 `:`)、confidence 數字→字串轉換
 - **相簿合併判讀**：Telegram 一次傳多張照片會拆成 N 個獨立 message（只有第一張帶 caption），靠 `media_group_id` 串起來。收到第一張先回「分析中」並起收集任務，等 2 秒內沒有新的同組照片就視為到齊，**N 張圖 + caption 合併送一次 AI、寫一筆**。修此問題前是逐張各判讀一次（2026-07-30 實案：3 張同餐照片 → 3 筆，說明涵蓋的菜色被重複計算 642 kcal）
-- **圖片 24 小時過期**：暫存 data/media/，排程清理。相簿記錄的 `image_path` 是逗號串接的多個路徑，清理排程會拆開逐一刪
+- **圖片 24 小時過期**：暫存 data/media/，排程清理。相簿記錄的 `image_path` 是逗號串接的多個路徑，清理排程會拆開逐一刪。**孤兒檔兜底**：`cleanup_expired_images` 是 DB 驅動的，只認得 `meals.image_path` 還指得到的檔案；`/u` 撤銷會 `delete_meal` 刪整個 row、AI 分析失敗時照片已存檔但沒 insert，這兩條路徑都會讓檔案永久掃不到（2026-09-06 實案：15 個檔案有 13 個是孤兒）。故排程末尾再用 `sweep_orphan_media` 掃一次 `MEDIA_DIR`，刪掉 mtime > 48h 的檔案（DB 引用的最長活 24h + 一輪排程，48h 有邊際）。用 mtime 兜底而不是在每條斷關聯的路徑補刪除，是為了不依賴「日後新增路徑時記得補」
 - **API 費用追蹤**：每筆 meal 記錄 input/output tokens + ai_provider，週一推播週報（依 provider 分組，claude-cli 費用為 $0）
 - **ai_confidence 觀察中**：v1 時代 Gemini 2.5 Pro 幾乎不回 low/medium；prompt v2 + gemini-3.1-pro-preview 已見合理分佈（high 有依據、推估給 medium、不確定給 low），欄位續留觀察。已知失效模式：權威捏造時會連帶標 high。區分 AI vs 手動用 input_tokens=0 即可
 - **手動記錄**：三種免 AI 輸入方式 — 貼上 Bot 回覆、@前綴快速輸入、/m 指令，末尾可加 x 倍數（如 x2, x0.5）

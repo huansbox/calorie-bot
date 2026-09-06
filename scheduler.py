@@ -10,6 +10,7 @@ from config import (
     COROS_EMAIL,
     COROS_PASSWORD,
     COROS_TOKEN_PATH,
+    MEDIA_DIR,
     PUSH_HOUR,
     TELEGRAM_CHAT_ID,
 )
@@ -308,12 +309,43 @@ async def sync_coros_weight(app: Application):
             logger.error("Failed to send weight sync alert: %s", send_err)
 
 
-async def cleanup_expired_images(app: Application):
-    """清理過期照片檔案並更新 DB。"""
-    expired = get_expired_images()
-    if not expired:
-        return
+# 孤兒照片兜底的年齡門檻。DB 引用的照片最長活 24h，再加一輪排程，48h 有足夠邊際。
+ORPHAN_MEDIA_MAX_AGE_HOURS = 48
 
+
+def sweep_orphan_media(
+    media_dir, max_age_hours: int = ORPHAN_MEDIA_MAX_AGE_HOURS
+) -> int:
+    """刪掉 media_dir 底下過舊的檔案，回傳刪除數。
+
+    cleanup_expired_images 是 DB 驅動的，只認得 meals.image_path 還指得到的檔案。
+    關聯一旦斷掉——`/u` 撤銷直接 delete_meal 刪掉整個 row、AI 分析失敗時照片已存檔
+    但沒 insert——檔案就再也不會被掃到，單向累積（2026-09-06 實案：15 個檔案有 13
+    個是這樣的孤兒）。與其在每條會斷關聯的路徑各補一次刪除、日後新增路徑再漏一次，
+    這裡用 mtime 兜底。
+    """
+    if not os.path.isdir(media_dir):
+        return 0
+
+    cutoff = datetime.now(timezone.utc).timestamp() - max_age_hours * 3600
+    removed = 0
+    for name in os.listdir(media_dir):
+        path = os.path.join(media_dir, name)
+        try:
+            if not os.path.isfile(path) or os.path.getmtime(path) >= cutoff:
+                continue
+            os.remove(path)
+        except OSError:
+            # 檔案可能剛好被別的路徑刪掉，或權限問題：記下來繼續掃，不中斷排程
+            logger.warning("Failed to sweep orphan media: %s", path, exc_info=True)
+            continue
+        removed += 1
+    return removed
+
+
+async def cleanup_expired_images(app: Application):
+    """清理過期照片檔案並更新 DB，最後掃一次孤兒檔。"""
+    expired = get_expired_images()
     for row in expired:
         # 相簿記錄的 image_path 是逗號串接的多個路徑（見 handlers/meal.py）
         for path in (row["image_path"] or "").split(","):
@@ -322,7 +354,13 @@ async def cleanup_expired_images(app: Application):
                 logger.info("Deleted expired image: %s", path)
         clear_image_path(row["id"])
 
-    logger.info("Cleaned up %d expired images", len(expired))
+    if expired:
+        logger.info("Cleaned up %d expired images", len(expired))
+
+    # 沒有過期記錄時也要掃：孤兒檔案正是 DB 那端已經沒有記錄的那些
+    swept = sweep_orphan_media(MEDIA_DIR)
+    if swept:
+        logger.info("Swept %d orphan media files", swept)
 
 
 UPDATE_REMINDER_TEXT = """每月 claude binary 更新提醒。把下面整段貼給一個能 SSH 到 VPS 的 Claude Code session：
