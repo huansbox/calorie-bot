@@ -223,7 +223,7 @@ async def _process_backfill(
 ):
     """補記的共用流程：AI 分析 → DB → 回覆。"""
     from config import MEDIA_DIR
-    from services.ai import analyze_food
+    from services.ai import analyze_food, push_primary_alert
     from services.db import get_meals_by_date, insert_meal
     from services.nutrition import format_macros
 
@@ -235,8 +235,11 @@ async def _process_backfill(
         )
     except Exception:
         logger.exception("AI analysis failed (backfill)")
+        await push_primary_alert(update.message.reply_text)
         await processing_msg.edit_text("分析失敗，請重試。")
         return
+
+    await push_primary_alert(update.message.reply_text)
 
     recorded_at = date_to_recorded_at(target_date)
 

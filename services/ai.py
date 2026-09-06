@@ -425,6 +425,59 @@ async def _analyze_claude_cli(
     return result
 
 
+# ── 主路徑健康狀態 ────────────────────────────────────
+# AI_PROVIDER 指定的主路徑失敗時會靜默 fallback 到 claude -p，判讀照常成功，所以
+# 除了 log 之外沒有任何跡象。2026-09-04 Gemini 對 VPS IP 回 400（User location is
+# not supported）連續兩天、15 次呼叫全滅，就是這樣沒被發現的。
+#
+# 這裡只記狀態「轉換」：主路徑由通轉不通推一次、由不通轉通再推一次，中間持續失敗
+# 不重複推（每餐都推等於噪音）。process 重啟會歸零，重啟後第一次失敗再推一次。
+_primary_down = False
+_pending_alert: str | None = None
+
+
+def _mark_primary_failed(provider: str, error: str) -> None:
+    global _primary_down, _pending_alert
+    if _primary_down:
+        return
+    _primary_down = True
+    _pending_alert = (
+        f"⚠️ AI 主路徑（{provider}）失敗，已改用 claude -p 判讀。\n"
+        f"錯誤：{error[:200]}\n"
+        f"持續失敗不再重複通知，恢復時會再通知一次。"
+    )
+
+
+def _mark_primary_ok(provider: str) -> None:
+    global _primary_down, _pending_alert
+    if not _primary_down:
+        return
+    _primary_down = False
+    _pending_alert = f"✅ AI 主路徑（{provider}）已恢復。"
+
+
+def consume_primary_alert() -> str | None:
+    """取出待推播的主路徑狀態變化訊息（取出即清空，同一次轉換只會拿到一次）。"""
+    global _pending_alert
+    msg, _pending_alert = _pending_alert, None
+    return msg
+
+
+async def push_primary_alert(send) -> None:
+    """把待推播的主路徑狀態變化交給 send（可 await 的送訊息函式）。
+
+    services 不直接碰 Telegram，由 handler 傳入送訊息的方式。推播失敗只記 log，
+    不能影響本來要回給使用者的判讀結果。
+    """
+    msg = consume_primary_alert()
+    if not msg:
+        return
+    try:
+        await send(msg)
+    except Exception:
+        logger.error("Failed to send AI primary-path alert", exc_info=True)
+
+
 # ── 統一入口 ──────────────────────────────────────────
 
 
@@ -447,9 +500,13 @@ async def analyze_food(
     if AI_PROVIDER == "gemini":
         # 保留：Gemini API 優先，失敗時 fallback 到 claude -p CLI
         try:
-            return await _analyze_gemini(text=text, image_paths=image_paths)
+            result = await _analyze_gemini(text=text, image_paths=image_paths)
         except Exception as e:
             logger.warning("Gemini 分析失敗，切換至 claude -p: %s", e)
+            _mark_primary_failed("gemini", str(e))
+        else:
+            _mark_primary_ok("gemini")
+            return result
         return await _analyze_claude_cli(text=text, image_paths=image_paths)
 
     # 預設 claude-cli：唯一路徑，無 fallback

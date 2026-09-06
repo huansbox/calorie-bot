@@ -7,7 +7,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from config import MEDIA_DIR
-from services.ai import analyze_food
+from services.ai import analyze_food, push_primary_alert
 from services.db import get_today_meals, insert_meal
 from services.nutrition import format_macros
 
@@ -130,8 +130,11 @@ async def _process_food(
         result = await analyze_food(text=text, image_paths=image_paths)
     except Exception:
         logger.exception("AI analysis failed")
+        await push_primary_alert(update.message.reply_text)
         await processing_msg.edit_text("分析失敗，請重試。")
         return
+
+    await push_primary_alert(update.message.reply_text)
 
     meal_type = _infer_meal_type()
 
