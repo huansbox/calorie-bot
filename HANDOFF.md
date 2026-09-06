@@ -1,32 +1,44 @@
 # HANDOFF
 
 - Status: idle
-- Task/issue: no tracker entry — 9/01 月更新提醒觸發的 claude CLI 維護，過程中發現並修復 claude -p fallback 的認證失效
+- Task/issue: no tracker entry — 使用者從「9/4 起判讀模型變成 claude、且時而 haiku 時而 sonnet」的觀察起手，展開診斷 → 修復 → VPS 維運的一連串工作
 - Branch: main
-- Updated: 2026-09-01
+- Updated: 2026-09-06
 
 ## Progress
 
-- **claude binary 更新**：VPS botuser 的 CLI `2.1.197 → 2.1.252`，symlink 自動重指，prune 掉 `2.1.96`（versions 目錄留 2.1.197 + 2.1.252，439M）。`--model sonnet` 仍解析到 `claude-sonnet-5`，沒跳版
-- **發現 fallback 認證早已失效**：smoke 回 `OAuth session expired and could not be refreshed`，`~/.claude/.credentials.json` 的 token 被 CLI 清成空字串。根因不是這次更新——journal 顯示最後一次成功的 `claude -p` 是 **2026-07-18 05:07**（切 gemini 當天一次 429 fallback），之後 6 週零呼叫；那份短期 token 只在 `claude -p` 實際執行時才會 refresh，沒被呼叫就靜靜過期。credentials 被清空的時點（09:42:56 UTC）早於新 binary 寫入，是 CLI 啟動時 refresh 失敗所致，更新只是把它暴露出來
-- **改用長效 OAuth token**（`b9e013b`）：`claude setup-token` 產生的 1 年期 token（**2027-09-01 到期**）存進 1Password `Developer / Calorie Bot` 的 `CLAUDE_CODE_OAUTH_TOKEN` 欄位，VPS `.env` 加 `op://` 參照注入（舊檔備份 `.env.bak.20260901`）。關鍵事實：`setup-token` **不會**寫回 credentials 檔，它產的 token 只能透過環境變數使用。長效 token 沒有「不用就壞」的性質
-- **月提醒改寫兩輪**（`3d6b9d4` → `b9e013b`）：① 開頭「唯讀報告」與 step 2/5 實際會寫入矛盾，改成「不要 restart bot、不要改 .env 或 systemd 設定」；② step 3 補失敗分支與**必要的 token 注入指令**——SSH 進去直接跑 `claude -p` 必定失敗（credentials 檔是空的），提醒現在直接給注入三行；③ 補 `< /dev/null`（heredoc 餵 bash 時 claude 會把剩下的 script 當 stdin 吃掉，症狀是完全無輸出，本次實際踩到）；④ step 4 警告 ping 這種極短輸入下內部 haiku 用量會反超 sonnet，別直接取 modelUsage 用量最大者
-- **`services/ai.py` 的取模型邏輯經檢視無誤**：真實判讀時 SYSTEM_PROMPT 2415 字，sonnet 的 inputTokens 穩壓 haiku 的約 900，「取用量最大者」成立；問題只在 ping smoke 測不出來，已寫進提醒
-- **驗證過上一個 session 的 COROS 觀察項**：8/31 19:05 UTC（台北 9/01 03:05）的 TDEE 同步 log 顯示 `refresh_token rotated` 成功、抓到 8 天 daily health、寫入 8/31 = 3550 kcal。COROS 的 refresh 500 已自行修復，rotation 恢復正常，帳密自動重新授權因此從未真的觸發（journal 8/20 起無相關事件）
-- **文件**：`CLAUDE.md` 新增「claude -p 認證＝長效 OAuth token」設計決策（含 2027-09 換發流程、為何不再用 credentials 檔、`ANTHROPIC_API_KEY` 註解狀態使 OAuth 成為唯一認證來源），1Password 欄位清單補 `CLAUDE_CODE_OAUTH_TOKEN`
+- **診斷 haiku/sonnet 交替**：實際判讀一直是 sonnet，錯的是 `ai_model` 記錄。`services/ai.py` 挑「用量最大模型」的計分只算 `inputTokens + outputTokens`，而 CLI 2.1.222 把整份 system prompt 走 prompt cache，主模型 `inputTokens` 只剩個位數（實測 sonnet 2/88 + cacheRead 18543 + cacheCreation 21219 vs 內部 haiku 911/15）→ 計分變成只比 output，臨界值 ≈ 926。DB 完全吻合：haiku 那批 output 122–759、sonnet 那批 970–1428，零重疊。**注意這推翻了 9/01 HANDOFF 的結論**——當時「真實判讀時 sonnet inputTokens 穩壓 haiku 約 900」在無 cache 的舊版成立，prompt cache 上線後失效
+- **修復並部署**（`903e5e2`）：計分改為含 `cacheReadInputTokens` + `cacheCreationInputTokens`，差距從 90:926 變 39852:926
+- **DB 回填**：`meals.ai_model` 誤記的 11 筆全部 UPDATE 回 `claude-sonnet-5`（9/4–9/5 共 9 筆為本次 bug；另 2 筆 7/01 是 `97755c7` 修 `next(iter())` 之前的舊 bug，`input_tokens` 2653/2655 的無 cache 形狀可佐證）。查詢 `ai_model=like.*haiku*` 現回 `[]`
+- **診斷 Gemini 失效**：2026-09-04 01:52 UTC 起 VPS 對 `generativelanguage.googleapis.com` 全數 400 `User location is not supported`，是 Google 對 datacenter IP 的封鎖，非 key／專案／tier／抵免額問題。詳見 `issues/carryover-gemini-ip-block.md`
+- **主路徑失敗告警**（`7d5ac16`）：gemini 的 fallback 原本完全靜默（只有 `logger.warning`），15 次呼叫全滅兩天沒被發現。改為只記狀態**轉換**、各推一則 Telegram，持續失敗不重複。`services` 不碰 Telegram：`push_primary_alert(send)` 收可 await 的送訊息函式，由 `handlers/meal.py`、`handlers/backfill.py` 傳入
+- **孤兒圖片兜底**（`eb1cbc7` + `32d96fd`）：`cleanup_expired_images` 是 DB 驅動的，`/u` 撤銷 `delete_meal` 與 AI 分析失敗兩條路徑會斷開關聯讓檔案永久殘留（VPS 實測 15 個檔案有 13 個是孤兒）。加 `sweep_orphan_media` 掃 mtime > 48h。**第一版部署後在 prod 把 `data/media/.gitkeep` 掃掉了**（它永遠是最舊的），已還原並補 dotfile 跳過
+- **VPS housekeeping**：刪 5 個 2026-03-11 扁平結構遺留的 `.py`、3 個 `.env.bak*`（逐檔驗過無明文密鑰）、1 個過期 COROS token 備份、13 個孤兒圖片
+- **SSH 加固 + log 降噪**（`39c0bb1`、`027220a`）：實測 24h 內 9,612 次 Failed password／174 個來源 IP，sshd 佔 journal 78.7%、httpx getUpdates 佔 17.6%。三項處置見 `CLAUDE.md`「SSH 加固與 log 噪音」段
+- **安全事件（本 session 造成）**：SA token 明文洩進 VPS `/var/log/auth.log`，見 `issues/carryover-op-token-rotation.md`
 
 ## Next step
 
-None。本 session 提出但**使用者未表態、故未建立 tracker 項目**的一件事：fallback 的健康度目前只有每月 1 號的手動提醒會檢出，中間任何時候壞掉都不會告警（這次就是壞了 6 週沒人知道）。若要補，最省的做法是加一個定期跑 `claude -p` smoke、失敗推 Telegram 的排程 job；這超出本次範圍，下個 session 應把它當「要不要做」的問題問，而不是當已核可的任務。其餘查過的地方：`issues/` 001–008 全數完成、GitHub 無 open issue、`CLAUDE.md`「進行中的設計」的 gemini／prompt v2 觀察清單都是持續觀察性質，沒有待辦動作。
+兩件都在 `issues/` 有 carry-over 項目，皆待使用者決定或動手，**都不是已規格化的任務**：
+
+1. `issues/carryover-op-token-rotation.md` —— **優先**。輪替 1Password SA token（使用者在 1Password 產生 → 寫入 VPS `/etc/calorie-bot/op-token.env` → restart → 驗證）
+2. `issues/carryover-gemini-ip-block.md` —— Gemini 路線三選一（換 IP／驗 Vertex／先觀察兩週）
+
+另外**繼續 carry 9/01 HANDOFF 未表態的一項、仍未建 entry**：fallback（`claude -p`）本身的健康度只有每月 1 號手動提醒會檢出。本 session 做的是**主路徑**失敗告警，方向相反，沒有涵蓋它。目前 gemini 全掛使 `claude -p` 天天被呼叫，問題暫時不顯；gemini 一恢復就會回來。下個 session 應把它當「要不要做」的問題問，不要當已核可任務。
+
+已查過、無待辦動作：`issues/` 001–008 全數完成（COROS 體重同步 PRD）、GitHub issues 為空（此 repo 用本地 `issues/` 當 tracker）。
 
 ## Validation
 
-- `uv run pytest -q` 231 passed（兩次：改提醒文字後、改 CLAUDE.md 後）
-- `uv run python -c "import scheduler; print(UPDATE_REMINDER_TEXT)"` 確認提醒可正常組出，長度 1486 字元（Telegram 上限 4096）
-- **VPS 實測 claude -p**：注入 `CLAUDE_CODE_OAUTH_TOKEN` 後 `exit=0`、`is_error=false`、`result` 回合法 JSON、`modelUsage` 含 `claude-sonnet-5`
-- **VPS 環境驗證**：restart 後確認 bot 子行程 environ 內有 `CLAUDE_CODE_OAUTH_TOKEN`；service `active`，排程正常註冊
-- 已部署：VPS `git log -1` = `143b49b`
-- 未跑：真實 fallback 端到端（要 gemini 失敗才會觸發，無法自造）；圖片路徑 smoke（下一餐真實照片會驗）
+- `uv run pytest -q` **256 passed**（本 session 新增 20 個 case：`test_ai.py` 12、`test_scheduler.py` 12 減去重構；全套跑過多次，含連跑 3 次確認無 flaky）
+- **prod smoke（模型記錄）**：VPS 實跑 `_analyze_claude_cli("葡式蛋塔 1顆")` → `ai_model = claude-sonnet-5`，output 356 tokens（舊邏輯必記成 haiku）
+- **prod smoke（告警狀態機）**：第一次呼叫產生含真實 400 錯誤的告警訊息、第二次回 `None`（抑制生效）
+- **prod 驗證（兜底掃描）**：`swept = 0`，`.gitkeep` 與 2 張未滿 48h 的照片都保留
+- **prod 驗證（httpx 降噪）**：restart 後 90 秒內 getUpdates INFO **0 筆**
+- **prod 驗證（SSH 加固）**：`sshd -T` 顯示 `passwordauthentication no`；新連線 key 登入 OK；密碼登入回 `Permission denied (publickey)`；加固後所有 `Accepted` 均為同一把 ED25519 + 使用者 IP
+- **DB 驗證**：UPDATE 回傳 9 + 2 筆，事後查詢 haiku 殘留為 `[]`
+- 已部署：VPS `git log -1` = `027220a`，service `active`
+- **未跑**：真實 fallback 端到端（要 gemini 恢復才測得到 `_mark_primary_ok` 的恢復通知分支）；`/u` 撤銷造成孤兒後被兜底掃描回收的完整循環（需等 48h）；Vertex AI 可行性（需先建 GCP service account）
 
 ## Blockers
 
