@@ -25,11 +25,20 @@ class TestSweepOrphanMedia:
         assert sweep_orphan_media(tmp_path) == 0
         assert os.path.exists(path)
 
-    def test_keeps_file_exactly_at_threshold(self, tmp_path):
-        """邊界：剛好滿 48h 不刪，超過才刪。"""
-        path = _make_file(tmp_path, "edge.jpg", age_hours=ORPHAN_MEDIA_MAX_AGE_HOURS)
+    def test_boundary_just_inside_threshold(self, tmp_path):
+        """略新於門檻不刪。用 3 分鐘邊際避開「設 mtime 到實際比對」之間的耗時。"""
+        path = _make_file(
+            tmp_path, "edge.jpg", age_hours=ORPHAN_MEDIA_MAX_AGE_HOURS - 0.05
+        )
         assert sweep_orphan_media(tmp_path) == 0
         assert os.path.exists(path)
+
+    def test_boundary_just_past_threshold(self, tmp_path):
+        path = _make_file(
+            tmp_path, "edge.jpg", age_hours=ORPHAN_MEDIA_MAX_AGE_HOURS + 0.05
+        )
+        assert sweep_orphan_media(tmp_path) == 1
+        assert not os.path.exists(path)
 
     def test_mixed_directory(self, tmp_path):
         old_a = _make_file(tmp_path, "a.jpg", age_hours=100)
@@ -44,6 +53,19 @@ class TestSweepOrphanMedia:
         path = _make_file(tmp_path, "old.jpg", age_hours=3)
         assert sweep_orphan_media(tmp_path, max_age_hours=2) == 1
         assert not os.path.exists(path)
+
+    def test_keeps_gitkeep(self, tmp_path):
+        """data/media/.gitkeep 是版控佔位檔，永遠是最舊的，不能被掃掉。"""
+        path = _make_file(tmp_path, ".gitkeep", age_hours=5000)
+        assert sweep_orphan_media(tmp_path) == 0
+        assert os.path.exists(path)
+
+    def test_keeps_dotfiles_but_sweeps_the_rest(self, tmp_path):
+        keep = _make_file(tmp_path, ".gitkeep", age_hours=5000)
+        gone = _make_file(tmp_path, "old.jpg", age_hours=100)
+        assert sweep_orphan_media(tmp_path) == 1
+        assert os.path.exists(keep)
+        assert not os.path.exists(gone)
 
     def test_missing_directory_is_noop(self, tmp_path):
         assert sweep_orphan_media(os.path.join(str(tmp_path), "nope")) == 0
