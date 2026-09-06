@@ -203,4 +203,4 @@ VPS 原本 `PasswordAuthentication yes` + `PermitRootLogin yes`，24 小時內�
 
 1. **`/etc/ssh/sshd_config.d/10-hardening.conf`**：`PasswordAuthentication no` + `PermitRootLogin prohibit-password` + `KbdInteractiveAuthentication no`。**檔名前綴必須小於 `50-cloud-init.conf`**——sshd_config 取「第一個出現」的值不是最後一個，而 `50-cloud-init.conf` 正是 `PasswordAuthentication yes` 的來源；用 `99-` 會靜默失效且 `sshd -t` 不報錯。改完用 `sshd -T` 確認解析後的有效值，再開新連線驗證。登入一律走 publickey，root 的 `authorized_keys` 有 `calobot-vps` 與 `macbook-calorie-bot` 兩把。
 2. **`main.py` 把 `httpx` logger 設 WARNING**：polling 每 10 秒一筆 getUpdates 200 OK＝8,640 行/天，無診斷價值；失敗仍以 WARNING 以上留下。
-3. **`/etc/systemd/journald.conf.d/10-retention.conf`**：`MaxRetentionSec=180d`，`SystemMaxUse` 維持預設（檔案系統 10% = 2.4G）當容量上限。原本 2.3G 剛好收斂在預設上限＝93 天；噪音消除後每日約 0.9MB，180 天約 162MB，時間會成為第一約束。
+3. **`/etc/systemd/journald.conf.d/10-retention.conf`**：`MaxRetentionSec=180d`，`SystemMaxUse` 維持預設（檔案系統 10% = 2.4G）當容量上限。原本 2.3G 剛好收斂在預設上限＝93 天；兩項降噪後**實測** 5.9 MB/day（加固前 25.3），180 天約 1.06G，仍在 2.4G 上限內，時間為第一約束。**注意 `PasswordAuthentication no` 不會讓 sshd log 歸零**：認證必定失敗，但 sshd 仍為每次密碼嘗試記一行 `Failed password`，實測只降約 76%，加固後 sshd 仍佔 journal 的八成左右。餘裕約 2 倍，夠用就不加 fail2ban（密碼登入已關，它只降 log 不增安全）。
