@@ -159,6 +159,8 @@ systemctl stop calorie-bot       # 停止
 
 ### 更新部署
 
+VPS 的 SSH 只開在 tailnet（Tailscale SSH），從已加入 tailnet 的裝置執行：
+
 ```bash
-ssh root@107.175.30.172 "cd /home/botuser/calorie-bot && sudo -u botuser git pull origin main && sudo systemctl restart calorie-bot"
+ssh root@racknerd-d411643 "cd /home/botuser/calorie-bot && sudo -u botuser git pull origin main && sudo systemctl restart calorie-bot"
 ```

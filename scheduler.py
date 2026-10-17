@@ -367,12 +367,12 @@ async def cleanup_expired_images(app: Application):
         logger.info("Swept %d orphan media files", swept)
 
 
-UPDATE_REMINDER_TEXT = """每月 claude binary 更新提醒。把下面整段貼給一個能 SSH 到 VPS 的 Claude Code session：
+UPDATE_REMINDER_TEXT = """每月 claude binary 更新提醒。把下面整段貼給已加入 tailnet 的電腦上的 Claude Code session（VPS 的 SSH 只開在 tailnet）：
 
 ————
-更新 calorie-bot VPS（root@107.175.30.172）上 botuser 的 claude binary 並驗證。
+更新 calorie-bot VPS（root@racknerd-d411643）上 botuser 的 claude binary 並驗證。
 可以動 binary 與版本目錄，但不要 restart bot、不要改 .env 或 systemd 設定：
-1. 記更新前版本：ssh root@107.175.30.172 "sudo -u botuser /home/botuser/.local/bin/claude --version"
+1. 記更新前版本：ssh root@racknerd-d411643 "sudo -u botuser /home/botuser/.local/bin/claude --version"
 2. 更新：同上路徑 claude update
 3. smoke（文字）。認證是 CLAUDE_CODE_OAUTH_TOKEN，只活在 bot 的 op run 環境裡，
    SSH 進去直接跑 claude -p 一定失敗（~/.claude/.credentials.json 是空的），要自己注入：

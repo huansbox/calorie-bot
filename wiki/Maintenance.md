@@ -25,8 +25,10 @@
 
 ## 部署更新
 
+從已加入 tailnet 的裝置執行（VPS 的 SSH 只開在 tailnet，見 CLAUDE.md「SSH 改走 Tailscale」）：
+
 ```bash
-ssh root@107.175.30.172 "cd /home/botuser/calorie-bot && sudo -u botuser git pull origin main && sudo systemctl restart calorie-bot"
+ssh root@racknerd-d411643 "cd /home/botuser/calorie-bot && sudo -u botuser git pull origin main && sudo systemctl restart calorie-bot"
 ```
 
 首次部署、systemd unit 內容、COROS token 首次部署流程見 [README](https://github.com/huansbox/calorie-bot/blob/main/README.md) 與 [CLAUDE.md 部署段](https://github.com/huansbox/calorie-bot/blob/main/CLAUDE.md)。
@@ -60,7 +62,7 @@ ssh root@107.175.30.172 "cd /home/botuser/calorie-bot && sudo -u botuser git pul
 
 | 症狀 | 先看哪裡 |
 |---|---|
-| 任何異常 | `ssh root@107.175.30.172` 後 `journalctl -u calorie-bot -f`（時間戳是 UTC） |
+| 任何異常 | `ssh root@racknerd-d411643` 後 `journalctl -u calorie-bot -f`（時間戳是 UTC） |
 | 回覆「分析失敗，請重試。」 | Gemini API 與 fallback claude -p **兩者都掛**才會出現（Gemini 單獨掛會靜默 fallback，log 有 warning、回覆模型標籤變 claude）。先用手動記錄逃生（`@品名 熱量`、快取編號 11-99、`/m`），再查 journalctl 與 VPS 手動跑 `claude -p` |
 | 服務起不來 | `systemctl status calorie-bot`；確認 `/etc/calorie-bot/op-token.env` 存在且 1Password Service Account token 有效 |
 | COROS 同步告警（昨天沒拉到資料） | 檢查 `data/coros-token.json`（botuser 需有檔案與目錄寫權限）；token rotation 壞掉需本機重跑 `scripts/coros_mcp_bootstrap.py` 再傳上去 |
